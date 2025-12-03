@@ -356,21 +356,21 @@ var template = []ProviderTemplate{
 		Type: "openai",
 		Template: `{
 			"base_url": "https://api.openai.com/v1",
-			"api_key": "YOUR_API_KEY"
+			"api_keys": ["KEY_A", "KEY_B"]
 		}`,
 	},
 	{
 		Type: "openai-res",
 		Template: `{
 			"base_url": "https://api.openai.com/v1",
-			"api_key": "YOUR_API_KEY"
+			"api_keys": ["KEY_A", "KEY_B"]
 		}`,
 	},
 	{
 		Type: "anthropic",
 		Template: `{
 			"base_url": "https://api.anthropic.com/v1",
-			"api_key": "YOUR_API_KEY",
+			"api_keys": ["KEY_A", "KEY_B"],
 			"version": "2023-06-01"
 		}`,
 	},

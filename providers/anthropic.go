@@ -4,20 +4,29 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
+	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/tidwall/sjson"
 )
 
 type Anthropic struct {
-	BaseURL string `json:"base_url"`
-	APIKey  string `json:"api_key"`
-	Version string `json:"version"`
+	BaseURL string   `json:"base_url"`
+	APIKey  string   `json:"api_key,omitempty"`
+	APIKeys []string `json:"api_keys,omitempty"`
+	Version string   `json:"version"`
+	cursor  uint64   `json:"-"`
 }
 
 func (a *Anthropic) BuildReq(ctx context.Context, header http.Header, model string, rawBody []byte) (*http.Request, error) {
+	key, err := a.pickKey()
+	if err != nil {
+		return nil, err
+	}
 	body, err := sjson.SetBytes(rawBody, "model", model)
 	if err != nil {
 		return nil, err
@@ -30,7 +39,7 @@ func (a *Anthropic) BuildReq(ctx context.Context, header http.Header, model stri
 		req.Header = header
 	}
 	req.Header.Set("content-type", "application/json")
-	req.Header.Set("x-api-key", a.APIKey)
+	req.Header.Set("x-api-key", key)
 	req.Header.Set("anthropic-version", a.Version)
 	return req, nil
 }
@@ -50,12 +59,16 @@ type AnthropicModel struct {
 }
 
 func (a *Anthropic) Models(ctx context.Context) ([]Model, error) {
+	key, err := a.pickKey()
+	if err != nil {
+		return nil, err
+	}
 	req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("%s/models", a.BaseURL), nil)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("content-type", "application/json")
-	req.Header.Set("x-api-key", a.APIKey)
+	req.Header.Set("x-api-key", key)
 	req.Header.Set("anthropic-version", a.Version)
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -79,4 +92,21 @@ func (a *Anthropic) Models(ctx context.Context) ([]Model, error) {
 		})
 	}
 	return modelList.Data, nil
+}
+
+func (a *Anthropic) pickKey() (string, error) {
+	filtered := make([]string, 0, len(a.APIKeys))
+	for _, k := range a.APIKeys {
+		if s := strings.TrimSpace(k); s != "" {
+			filtered = append(filtered, s)
+		}
+	}
+	if len(filtered) > 0 {
+		idx := atomic.AddUint64(&a.cursor, 1)
+		return filtered[(idx-1)%uint64(len(filtered))], nil
+	}
+	if strings.TrimSpace(a.APIKey) != "" {
+		return strings.TrimSpace(a.APIKey), nil
+	}
+	return "", errors.New("no api key configured for anthropic provider")
 }
