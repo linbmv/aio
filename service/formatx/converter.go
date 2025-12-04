@@ -117,6 +117,7 @@ func AnthropicToOpenAI(raw []byte, model string) ([]byte, error) {
 // AnthropicSSEToOpenAI 将 Anthropic SSE 流转换为 OpenAI SSE 格式
 func AnthropicSSEToOpenAI(r io.Reader, w io.Writer, model string) error {
 	scanner := bufio.NewScanner(r)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	var eventType string
 	chunkID := fmt.Sprintf("chatcmpl-%d", time.Now().Unix())
 
@@ -138,7 +139,10 @@ func AnthropicSSEToOpenAI(r io.Reader, w io.Writer, model string) error {
 						Text string `json:"text"`
 					} `json:"delta"`
 				}
-				if err := json.Unmarshal([]byte(data), &delta); err == nil && delta.Delta.Text != "" {
+				if err := json.Unmarshal([]byte(data), &delta); err != nil {
+					return fmt.Errorf("anthropic stream decode error: %w", err)
+				}
+				if delta.Delta.Text != "" {
 					chunk := map[string]interface{}{
 						"id":      chunkID,
 						"object":  "chat.completion.chunk",
@@ -166,11 +170,17 @@ func AnthropicSSEToOpenAI(r io.Reader, w io.Writer, model string) error {
 					flusher.Flush()
 				}
 				return nil
+
+			case "error":
+				return fmt.Errorf("anthropic stream error: %s", data)
 			}
 		}
 	}
 
-	return scanner.Err()
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("anthropic stream read error: %w", err)
+	}
+	return fmt.Errorf("anthropic stream closed without stop event")
 }
 
 // DetectFormat 检测请求格式
@@ -279,9 +289,9 @@ func ConvertRequest(raw []byte, from, to string) ([]byte, error) {
 		}
 		return OpenAIToAnthropic(converted)
 	case from == consts.StyleAnthropic && to == consts.StyleOpenAI:
-		return raw, nil // Anthropic 请求无需转换，响应时转
+		return nil, fmt.Errorf("unsupported request convert: %s -> %s", from, to)
 	case from == consts.StyleAnthropic && to == consts.StyleOpenAIRes:
-		return raw, nil // Anthropic 请求无需转换，响应时转
+		return nil, fmt.Errorf("unsupported request convert: %s -> %s", from, to)
 	}
 	return nil, fmt.Errorf("unsupported request convert: %s -> %s", from, to)
 }
