@@ -185,15 +185,79 @@ func DetectFormat(raw []byte, fallback string) string {
 	return fallback
 }
 
+// OpenAIResTo OpenAI 将 OpenAI-Res 请求转换为 OpenAI 格式
+func OpenAIResToOpenAI(raw []byte) ([]byte, error) {
+	input := gjson.GetBytes(raw, "input").String()
+	model := gjson.GetBytes(raw, "model").String()
+	return json.Marshal(map[string]interface{}{
+		"model":    model,
+		"messages": []map[string]string{{"role": "user", "content": input}},
+	})
+}
+
+// OpenAIToOpenAIRes 将 OpenAI 请求转换为 OpenAI-Res 格式
+func OpenAIToOpenAIRes(raw []byte) ([]byte, error) {
+	model := gjson.GetBytes(raw, "model").String()
+	lastMsg := gjson.GetBytes(raw, "messages.#(role==\"user\")#.content").Array()
+	var input string
+	if len(lastMsg) > 0 {
+		input = lastMsg[len(lastMsg)-1].String()
+	}
+	return json.Marshal(map[string]string{"model": model, "input": input})
+}
+
+// AnthropicToOpenAIRes 将 Anthropic 响应转换为 OpenAI-Res 格式
+func AnthropicToOpenAIRes(raw []byte, model string) ([]byte, error) {
+	content := gjson.GetBytes(raw, "content.0.text").String()
+	return json.Marshal(map[string]interface{}{
+		"id":      gjson.GetBytes(raw, "id").String(),
+		"model":   model,
+		"output":  content,
+		"created": time.Now().Unix(),
+	})
+}
+
+// OpenAIToOpenAIRes Response 将 OpenAI 响应转换为 OpenAI-Res 格式
+func OpenAIRespToOpenAIRes(raw []byte, model string) ([]byte, error) {
+	content := gjson.GetBytes(raw, "choices.0.message.content").String()
+	return json.Marshal(map[string]interface{}{
+		"id":      gjson.GetBytes(raw, "id").String(),
+		"model":   model,
+		"output":  content,
+		"created": gjson.GetBytes(raw, "created").Int(),
+	})
+}
+
+// OpenAIResToOpenAIResp 将 OpenAI-Res 响应转换为 OpenAI 格式
+func OpenAIResToOpenAIResp(raw []byte, model string) ([]byte, error) {
+	output := gjson.GetBytes(raw, "output").String()
+	return json.Marshal(map[string]interface{}{
+		"id":      gjson.GetBytes(raw, "id").String(),
+		"object":  "chat.completion",
+		"created": gjson.GetBytes(raw, "created").Int(),
+		"model":   model,
+		"choices": []map[string]interface{}{
+			{
+				"index":         0,
+				"message":       map[string]string{"role": "assistant", "content": output},
+				"finish_reason": "stop",
+			},
+		},
+	})
+}
+
 // CanConvert 判断是否支持格式转换
 func CanConvert(from, to string) bool {
 	if from == to {
 		return true
 	}
-	if from == consts.StyleOpenAI && to == consts.StyleAnthropic {
-		return true
+	// 支持所有格式互转
+	validFormats := map[string]bool{
+		consts.StyleOpenAI:    true,
+		consts.StyleAnthropic: true,
+		consts.StyleOpenAIRes: true,
 	}
-	return false
+	return validFormats[from] && validFormats[to]
 }
 
 // ConvertRequest 转换请求格式
@@ -201,8 +265,23 @@ func ConvertRequest(raw []byte, from, to string) ([]byte, error) {
 	if from == to {
 		return raw, nil
 	}
-	if from == consts.StyleOpenAI && to == consts.StyleAnthropic {
+	switch {
+	case from == consts.StyleOpenAI && to == consts.StyleAnthropic:
 		return OpenAIToAnthropic(raw)
+	case from == consts.StyleOpenAI && to == consts.StyleOpenAIRes:
+		return OpenAIToOpenAIRes(raw)
+	case from == consts.StyleOpenAIRes && to == consts.StyleOpenAI:
+		return OpenAIResToOpenAI(raw)
+	case from == consts.StyleOpenAIRes && to == consts.StyleAnthropic:
+		converted, err := OpenAIResToOpenAI(raw)
+		if err != nil {
+			return nil, err
+		}
+		return OpenAIToAnthropic(converted)
+	case from == consts.StyleAnthropic && to == consts.StyleOpenAI:
+		return raw, nil // Anthropic 请求无需转换，响应时转
+	case from == consts.StyleAnthropic && to == consts.StyleOpenAIRes:
+		return raw, nil // Anthropic 请求无需转换，响应时转
 	}
 	return nil, fmt.Errorf("unsupported request convert: %s -> %s", from, to)
 }
@@ -212,8 +291,19 @@ func ConvertResponse(raw []byte, from, to, model string) ([]byte, error) {
 	if from == to {
 		return raw, nil
 	}
-	if from == consts.StyleAnthropic && to == consts.StyleOpenAI {
+	switch {
+	case from == consts.StyleAnthropic && to == consts.StyleOpenAI:
 		return AnthropicToOpenAI(raw, model)
+	case from == consts.StyleAnthropic && to == consts.StyleOpenAIRes:
+		return AnthropicToOpenAIRes(raw, model)
+	case from == consts.StyleOpenAI && to == consts.StyleOpenAIRes:
+		return OpenAIRespToOpenAIRes(raw, model)
+	case from == consts.StyleOpenAI && to == consts.StyleAnthropic:
+		return raw, nil // 不支持 OpenAI 响应转 Anthropic
+	case from == consts.StyleOpenAIRes && to == consts.StyleOpenAI:
+		return OpenAIResToOpenAIResp(raw, model)
+	case from == consts.StyleOpenAIRes && to == consts.StyleAnthropic:
+		return raw, nil // 不支持 OpenAI-Res 响应转 Anthropic
 	}
 	return nil, fmt.Errorf("unsupported response convert: %s -> %s", from, to)
 }
@@ -227,5 +317,7 @@ func ConvertStream(r io.Reader, w io.Writer, from, to, model string) error {
 	if from == consts.StyleAnthropic && to == consts.StyleOpenAI {
 		return AnthropicSSEToOpenAI(r, w, model)
 	}
-	return fmt.Errorf("unsupported stream convert: %s -> %s", from, to)
+	// 其他流式转换暂不支持，直接透传
+	_, err := io.Copy(w, r)
+	return err
 }
