@@ -40,37 +40,6 @@ func Auth(token string) gin.HandlerFunc {
 	}
 }
 
-// AuthEither 同时支持 Authorization Bearer 和 x-api-key（用于兼容路由）
-func AuthEither(token string) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		if token == "" {
-			c.Next()
-			return
-		}
-
-		apiKey := ""
-		auth := c.GetHeader("Authorization")
-		if strings.HasPrefix(auth, "Bearer ") {
-			apiKey = strings.TrimPrefix(auth, "Bearer ")
-		}
-		if apiKey == "" {
-			apiKey = c.GetHeader("x-api-key")
-		}
-
-		if apiKey == "" {
-			common.ErrorWithHttpStatus(c, http.StatusUnauthorized, http.StatusUnauthorized, "API key is missing")
-			c.Abort()
-			return
-		}
-		if apiKey != token {
-			common.ErrorWithHttpStatus(c, http.StatusUnauthorized, http.StatusUnauthorized, "Invalid token")
-			c.Abort()
-			return
-		}
-		c.Next()
-	}
-}
-
 func AuthAnthropic(koken string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// 不设置token，则不进行验证
@@ -79,7 +48,7 @@ func AuthAnthropic(koken string) gin.HandlerFunc {
 			return
 		}
 
-		// Anthropic 支持两种认证方式：x-api-key 或 Authorization Bearer
+		// Anthropic 支持两种认证方式：x-api-key 优先，兼容 Authorization Bearer
 		apiKey := c.GetHeader("x-api-key")
 		if apiKey == "" {
 			auth := c.GetHeader("Authorization")
@@ -104,6 +73,7 @@ func AuthAnthropic(koken string) gin.HandlerFunc {
 }
 
 // AuthEither 同时支持 Authorization Bearer 和 x-api-key（用于兼容路由）
+// 优先检查 x-api-key，避免错误 Bearer 覆盖正确 x-api-key 的情况
 func AuthEither(token string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if token == "" {
@@ -111,13 +81,14 @@ func AuthEither(token string) gin.HandlerFunc {
 			return
 		}
 
-		apiKey := ""
-		auth := c.GetHeader("Authorization")
-		if strings.HasPrefix(auth, "Bearer ") {
-			apiKey = strings.TrimPrefix(auth, "Bearer ")
-		}
+		// 优先检查 x-api-key（Anthropic 风格）
+		apiKey := c.GetHeader("x-api-key")
 		if apiKey == "" {
-			apiKey = c.GetHeader("x-api-key")
+			// 再检查 Authorization Bearer（OpenAI 风格）
+			auth := c.GetHeader("Authorization")
+			if strings.HasPrefix(auth, "Bearer ") {
+				apiKey = strings.TrimPrefix(auth, "Bearer ")
+			}
 		}
 
 		if apiKey == "" {
