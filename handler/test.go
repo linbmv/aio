@@ -2,8 +2,6 @@ package handler
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,7 +14,6 @@ import (
 	"github.com/atopos31/llmio/providers"
 	"github.com/gin-gonic/gin"
 	"github.com/openai/openai-go/v2"
-	"github.com/openai/openai-go/v2/option"
 	"github.com/tidwall/gjson"
 	"gorm.io/gorm"
 )
