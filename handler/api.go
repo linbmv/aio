@@ -91,7 +91,7 @@ func GetProviderModels(c *gin.Context) {
 		common.InternalServerError(c, err.Error())
 		return
 	}
-	chatModel, err := providers.New(provider.Type, provider.Config)
+	chatModel, err := providers.New(provider.Type, provider.Config, provider.ID)
 	if err != nil {
 		common.InternalServerError(c, "Failed to get models: "+err.Error())
 		return
@@ -356,14 +356,16 @@ var template = []ProviderTemplate{
 		Type: "openai",
 		Template: `{
 			"base_url": "https://api.openai.com/v1",
-			"api_keys": ["KEY_A", "KEY_B"]
+			"api_keys": ["KEY_A", "KEY_B"],
+			"key_strategy": "sequential"
 		}`,
 	},
 	{
 		Type: "openai-res",
 		Template: `{
 			"base_url": "https://api.openai.com/v1",
-			"api_keys": ["KEY_A", "KEY_B"]
+			"api_keys": ["KEY_A", "KEY_B"],
+			"key_strategy": "sequential"
 		}`,
 	},
 	{
@@ -371,7 +373,8 @@ var template = []ProviderTemplate{
 		Template: `{
 			"base_url": "https://api.anthropic.com/v1",
 			"api_keys": ["KEY_A", "KEY_B"],
-			"version": "2023-06-01"
+			"version": "2023-06-01",
+			"key_strategy": "sequential"
 		}`,
 	},
 }

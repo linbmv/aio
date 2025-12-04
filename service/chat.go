@@ -44,7 +44,7 @@ func BalanceChat(ctx context.Context, start time.Time, style string, before Befo
 
 	timer := time.NewTimer(time.Second * time.Duration(providersWithMeta.TimeOut))
 	defer timer.Stop()
-	for retry := range providersWithMeta.MaxRetry {
+	for retry := 0; retry < providersWithMeta.MaxRetry; retry++ {
 		select {
 		case <-ctx.Done():
 			return nil, 0, ctx.Err()
@@ -66,7 +66,7 @@ func BalanceChat(ctx context.Context, start time.Time, style string, before Befo
 
 			provider := providerMap[modelWithProvider.ProviderID]
 
-			chatModel, err := providers.New(style, provider.Config)
+			chatModel, err := providers.New(style, provider.Config, provider.ID)
 			if err != nil {
 				return nil, 0, err
 			}
@@ -99,23 +99,30 @@ func BalanceChat(ctx context.Context, start time.Time, style string, before Befo
 				},
 			}
 
-			req, err := chatModel.BuildReq(httptrace.WithClientTrace(ctx, trace), header, modelWithProvider.ProviderModel, before.raw)
+			req, usedKey, err := chatModel.BuildReq(httptrace.WithClientTrace(ctx, trace), header, modelWithProvider.ProviderModel, before.raw)
 			if err != nil {
+				if usedKey != "" {
+					providers.MarkKeyFailure(provider.ID, usedKey)
+				}
 				retryLog <- log.WithError(err)
-				// 构建请求失败 移除待选
-				balancer.Delete(id)
+				// 构建请求失败，标记 key 但不移除 provider，让其他 key 有机会
 				continue
 			}
 
 			res, err := client.Do(req)
 			if err != nil {
+				if usedKey != "" {
+					providers.MarkKeyFailure(provider.ID, usedKey)
+				}
 				retryLog <- log.WithError(err)
-				// 请求失败 移除待选
-				balancer.Delete(id)
+				// 请求失败，标记 key 但不移除 provider
 				continue
 			}
 
 			if res.StatusCode != http.StatusOK {
+				if usedKey != "" {
+					providers.MarkKeyFailure(provider.ID, usedKey)
+				}
 				byteBody, err := io.ReadAll(res.Body)
 				if err != nil {
 					slog.Error("read body error", "error", err)
@@ -125,10 +132,8 @@ func BalanceChat(ctx context.Context, start time.Time, style string, before Befo
 				if res.StatusCode == http.StatusTooManyRequests {
 					// 达到RPM限制 降低权重
 					balancer.Reduce(id)
-				} else {
-					// 非RPM限制 移除待选
-					balancer.Delete(id)
 				}
+				// 非 200 状态，标记 key 但不移除 provider
 				res.Body.Close()
 				continue
 			}

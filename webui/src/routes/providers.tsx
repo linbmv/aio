@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, Fragment } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -67,6 +67,15 @@ const formSchema = z.object({
   console: z.string().optional(),
 });
 
+type ProviderType = "openai" | "anthropic" | "openai-res" | "";
+
+type DynamicFormState = {
+  base_url: string;
+  api_keys: string[];
+  key_strategy: "sequential" | "round_robin";
+  version?: string;
+};
+
 export default function ProvidersPage() {
   const [providers, setProviders] = useState<Provider[]>([]);
   const [providerTemplates, setProviderTemplates] = useState<ProviderTemplate[]>([]);
@@ -84,6 +93,14 @@ export default function ProvidersPage() {
   const [nameFilter, setNameFilter] = useState<string>("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [availableTypes, setAvailableTypes] = useState<string[]>([]);
+
+  const [providerType, setProviderType] = useState<ProviderType>("");
+  const [configFields, setConfigFields] = useState<DynamicFormState>({
+    base_url: "",
+    api_keys: [""],
+    key_strategy: "sequential",
+    version: "",
+  });
 
   // 初始化表单
   const form = useForm<z.infer<typeof formSchema>>({
@@ -217,8 +234,67 @@ export default function ProvidersPage() {
     }
   };
 
+  const parseConfigToFields = (configJSON: string): DynamicFormState => {
+    try {
+      const parsed = JSON.parse(configJSON);
+      const base_url = parsed.base_url ?? "";
+      const api_keys = Array.isArray(parsed.api_keys) && parsed.api_keys.length > 0 ? parsed.api_keys : [""];
+      const key_strategy = parsed.key_strategy === "round_robin" ? "round_robin" : "sequential";
+      const version = parsed.version ?? "";
+      return { base_url, api_keys, key_strategy, version };
+    } catch {
+      return { base_url: "", api_keys: [""], key_strategy: "sequential", version: "" };
+    }
+  };
+
+  const updateConfigJSON = (fields: DynamicFormState) => {
+    const payload: Record<string, any> = {
+      base_url: fields.base_url,
+      api_keys: fields.api_keys.filter((k) => k.trim() !== ""),
+      key_strategy: fields.key_strategy,
+    };
+    if (providerType === "anthropic") {
+      payload.version = fields.version ?? "";
+    }
+    form.setValue("config", JSON.stringify(payload, null, 2));
+  };
+
+  const syncFieldsFromJSON = (jsonStr: string): boolean => {
+    try {
+      JSON.parse(jsonStr); // 先验证 JSON 格式
+      const parsed = parseConfigToFields(jsonStr);
+      setConfigFields(parsed);
+      return true;
+    } catch (err) {
+      toast.error("JSON 格式错误，请检查配置");
+      return false;
+    }
+  };
+
+  const syncFieldsFromType = (nextType: ProviderType) => {
+    const template = providerTemplates.find((t) => t.type === nextType);
+    if (template) {
+      const parsed = parseConfigToFields(template.template);
+      setConfigFields(parsed);
+      updateConfigJSON(parsed);
+    } else {
+      const empty = { base_url: "", api_keys: [""], key_strategy: "sequential" as const, version: "" };
+      setConfigFields(empty);
+      updateConfigJSON(empty);
+    }
+  };
+
+  const handleTypeChange = (nextType: ProviderType) => {
+    setProviderType(nextType);
+    form.setValue("type", nextType);
+    syncFieldsFromType(nextType);
+  };
+
   const openEditDialog = (provider: Provider) => {
     setEditingProvider(provider);
+    const parsed = parseConfigToFields(provider.Config);
+    setProviderType(provider.Type as ProviderType);
+    setConfigFields(parsed);
     form.reset({
       name: provider.Name,
       type: provider.Type,
@@ -230,6 +306,9 @@ export default function ProvidersPage() {
 
   const openCreateDialog = () => {
     setEditingProvider(null);
+    setProviderType("");
+    const empty = { base_url: "", api_keys: [""], key_strategy: "sequential" as const, version: "" };
+    setConfigFields(empty);
     form.reset({ name: "", type: "", config: "", console: "" });
     setOpen(true);
   };
@@ -457,16 +536,9 @@ export default function ProvidersPage() {
                     <FormLabel>类型</FormLabel>
                     <FormControl>
                       <select
-                        {...field}
+                        value={providerType}
+                        onChange={(e) => handleTypeChange(e.target.value as ProviderType)}
                         className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                        onChange={(e) => {
-                          field.onChange(e);
-                          // When type changes, populate config with template if available
-                          const selectedTemplate = providerTemplates.find(t => t.type === e.target.value);
-                          if (selectedTemplate) {
-                            form.setValue("config", selectedTemplate.template);
-                          }
-                        }}
                       >
                         <option value="">请选择提供商类型</option>
                         {providerTemplates.map((template) => (
@@ -481,22 +553,133 @@ export default function ProvidersPage() {
                 )}
               />
 
-              <FormField
-                control={form.control}
-                name="config"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>配置</FormLabel>
-                    <FormControl>
-                      <Textarea
-                        {...field}
-                        className="resize-none whitespace-pre overflow-x-auto"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
+              {/* 动态配置表单 */}
+              <div className="space-y-4 border rounded-md p-3">
+                <div className="grid gap-3">
+                  <Label>base_url</Label>
+                  <Input
+                    value={configFields.base_url}
+                    onChange={(e) => {
+                      const next = { ...configFields, base_url: e.target.value };
+                      setConfigFields(next);
+                      updateConfigJSON(next);
+                    }}
+                    placeholder="https://api.openai.com/v1"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label>api_keys</Label>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const next = { ...configFields, api_keys: [...configFields.api_keys, ""] };
+                        setConfigFields(next);
+                        updateConfigJSON(next);
+                      }}
+                    >
+                      添加 Key
+                    </Button>
+                  </div>
+                  <div className="space-y-2">
+                    {configFields.api_keys.map((k, idx) => (
+                      <Fragment key={idx}>
+                        <div className="flex items-center gap-2">
+                          <Input
+                            value={k}
+                            onChange={(e) => {
+                              const nextKeys = [...configFields.api_keys];
+                              nextKeys[idx] = e.target.value;
+                              const next = { ...configFields, api_keys: nextKeys };
+                              setConfigFields(next);
+                              updateConfigJSON(next);
+                            }}
+                            placeholder={`Key ${idx + 1}`}
+                          />
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              const nextKeys = configFields.api_keys.filter((_, i) => i !== idx);
+                              const next = { ...configFields, api_keys: nextKeys.length ? nextKeys : [""] };
+                              setConfigFields(next);
+                              updateConfigJSON(next);
+                            }}
+                          >
+                            删除
+                          </Button>
+                        </div>
+                      </Fragment>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="grid gap-3">
+                  <Label>key_strategy</Label>
+                  <Select
+                    value={configFields.key_strategy}
+                    onValueChange={(val) => {
+                      const next = { ...configFields, key_strategy: val as "sequential" | "round_robin" };
+                      setConfigFields(next);
+                      updateConfigJSON(next);
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="请选择策略" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="sequential">sequential (顺序)</SelectItem>
+                      <SelectItem value="round_robin">round_robin (轮询)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {providerType === "anthropic" && (
+                  <div className="grid gap-3">
+                    <Label>version</Label>
+                    <Input
+                      value={configFields.version ?? ""}
+                      onChange={(e) => {
+                        const next = { ...configFields, version: e.target.value };
+                        setConfigFields(next);
+                        updateConfigJSON(next);
+                      }}
+                      placeholder="2023-06-01"
+                    />
+                  </div>
                 )}
-              />
+
+                <FormField
+                  control={form.control}
+                  name="config"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="flex items-center gap-2">
+                        配置 JSON（可直接编辑，优先级最高）
+                      </FormLabel>
+                      <FormControl>
+                        <Textarea
+                          {...field}
+                          className="resize-none whitespace-pre overflow-x-auto font-mono text-xs"
+                          rows={8}
+                          onBlur={(e) => {
+                            const success = syncFieldsFromJSON(e.target.value);
+                            if (!success) {
+                              // JSON 解析失败，恢复到之前的值
+                              e.target.value = form.getValues("config");
+                            }
+                          }}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
 
               <FormField
                 control={form.control}

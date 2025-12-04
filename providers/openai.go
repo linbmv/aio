@@ -14,24 +14,26 @@ import (
 )
 
 type OpenAI struct {
-	BaseURL string   `json:"base_url"`
-	APIKey  string   `json:"api_key,omitempty"`
-	APIKeys []string `json:"api_keys,omitempty"`
-	cursor  uint64   `json:"-"`
+	BaseURL     string   `json:"base_url"`
+	APIKey      string   `json:"api_key,omitempty"`
+	APIKeys     []string `json:"api_keys,omitempty"`
+	KeyStrategy string   `json:"key_strategy,omitempty"` // sequential | round_robin
+	ProviderID  uint     `json:"-"`
+	cursor      uint64   `json:"-"`
 }
 
-func (o *OpenAI) BuildReq(ctx context.Context, header http.Header, model string, rawBody []byte) (*http.Request, error) {
+func (o *OpenAI) BuildReq(ctx context.Context, header http.Header, model string, rawBody []byte) (*http.Request, string, error) {
 	key, err := o.pickKey()
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	body, err := sjson.SetBytes(rawBody, "model", model)
 	if err != nil {
-		return nil, err
+		return nil, key, err
 	}
 	req, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("%s/chat/completions", o.BaseURL), bytes.NewReader(body))
 	if err != nil {
-		return nil, err
+		return nil, key, err
 	}
 	if header != nil {
 		req.Header = header
@@ -39,7 +41,7 @@ func (o *OpenAI) BuildReq(ctx context.Context, header http.Header, model string,
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", key))
 
-	return req, nil
+	return req, key, nil
 }
 
 func (o *OpenAI) Models(ctx context.Context) ([]Model, error) {
@@ -70,6 +72,11 @@ func (o *OpenAI) Models(ctx context.Context) ([]Model, error) {
 }
 
 func (o *OpenAI) pickKey() (string, error) {
+	strategy := strings.TrimSpace(o.KeyStrategy)
+	if strategy == "" {
+		strategy = "sequential"
+	}
+
 	filtered := make([]string, 0, len(o.APIKeys))
 	for _, k := range o.APIKeys {
 		if s := strings.TrimSpace(k); s != "" {
@@ -77,11 +84,35 @@ func (o *OpenAI) pickKey() (string, error) {
 		}
 	}
 	if len(filtered) > 0 {
-		idx := atomic.AddUint64(&o.cursor, 1)
-		return filtered[(idx-1)%uint64(len(filtered))], nil
+		switch strategy {
+		case "round_robin":
+			idx := atomic.AddUint64(&o.cursor, 1)
+			for range filtered {
+				key := filtered[(idx-1)%uint64(len(filtered))]
+				if IsKeyCoolingDown(o.ProviderID, key) {
+					idx++
+					continue
+				}
+				return key, nil
+			}
+			return "", errors.New("all api keys are cooling down")
+		case "sequential":
+			fallthrough
+		default:
+			for _, key := range filtered {
+				if IsKeyCoolingDown(o.ProviderID, key) {
+					continue
+				}
+				return key, nil
+			}
+			return "", errors.New("all api keys are cooling down")
+		}
 	}
-	if strings.TrimSpace(o.APIKey) != "" {
-		return strings.TrimSpace(o.APIKey), nil
+	if key := strings.TrimSpace(o.APIKey); key != "" {
+		if IsKeyCoolingDown(o.ProviderID, key) {
+			return "", errors.New("api key is cooling down")
+		}
+		return key, nil
 	}
 	return "", errors.New("no api key configured for openai provider")
 }

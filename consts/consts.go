@@ -14,5 +14,5 @@ const (
 	// 按顺序循环轮转，每次降低权重后移到队尾
 	BalancerRotor = "rotor"
 	// 默认策略
-	BalancerDefault = BalancerLottery
+	BalancerDefault = BalancerRotor
 )

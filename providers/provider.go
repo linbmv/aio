@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"sync"
 
@@ -25,7 +26,7 @@ type Model struct {
 }
 
 type Provider interface {
-	BuildReq(ctx context.Context, header http.Header, model string, rawData []byte) (*http.Request, error)
+	BuildReq(ctx context.Context, header http.Header, model string, rawData []byte) (*http.Request, string, error)
 	Models(ctx context.Context) ([]Model, error)
 }
 
@@ -33,13 +34,13 @@ var (
 	providerCache sync.Map
 )
 
-func cacheKey(providerType, config string) string {
-	hash := md5.Sum([]byte(providerType + ":" + config))
+func cacheKey(providerType string, providerID uint, config string) string {
+	hash := md5.Sum([]byte(fmt.Sprintf("%s:%d:%s", providerType, providerID, config)))
 	return hex.EncodeToString(hash[:])
 }
 
-func New(Type, providerConfig string) (Provider, error) {
-	key := cacheKey(Type, providerConfig)
+func New(Type, providerConfig string, providerID uint) (Provider, error) {
+	key := cacheKey(Type, providerID, providerConfig)
 	if cached, ok := providerCache.Load(key); ok {
 		return cached.(Provider), nil
 	}
@@ -52,18 +53,21 @@ func New(Type, providerConfig string) (Provider, error) {
 		if err = json.Unmarshal([]byte(providerConfig), &openai); err != nil {
 			return nil, errors.New("invalid openai config")
 		}
+		openai.ProviderID = providerID
 		provider = &openai
 	case consts.StyleOpenAIRes:
 		var openaiRes OpenAIRes
 		if err = json.Unmarshal([]byte(providerConfig), &openaiRes); err != nil {
 			return nil, errors.New("invalid openai-res config")
 		}
+		openaiRes.ProviderID = providerID
 		provider = &openaiRes
 	case consts.StyleAnthropic:
 		var anthropic Anthropic
 		if err = json.Unmarshal([]byte(providerConfig), &anthropic); err != nil {
 			return nil, errors.New("invalid anthropic config")
 		}
+		anthropic.ProviderID = providerID
 		provider = &anthropic
 	default:
 		return nil, errors.New("unknown provider")
