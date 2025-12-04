@@ -20,6 +20,17 @@ import (
 	"gorm.io/gorm"
 )
 
+type cancelOnClose struct {
+	io.ReadCloser
+	cancel context.CancelFunc
+}
+
+func (c cancelOnClose) Close() error {
+	err := c.ReadCloser.Close()
+	c.cancel()
+	return err
+}
+
 func BalanceChat(ctx context.Context, start time.Time, clientFormat string, before Before, providersWithMeta ProvidersWithMeta, reqMeta models.ReqMeta) (*http.Response, uint, string, error) {
 	slog.Info("request", "model", before.Model, "stream", before.Stream, "tool_call", before.toolCall, "structured_output", before.structuredOutput, "image", before.image)
 
@@ -90,7 +101,9 @@ func BalanceChat(ctx context.Context, start time.Time, clientFormat string, befo
 
 			chatModel, err := providers.New(provider.Type, provider.Config, provider.ID)
 			if err != nil {
-				return nil, 0, "", err
+				retryLog <- log.WithError(fmt.Errorf("provider init failed: %w", err))
+				balancer.Delete(id)
+				continue
 			}
 
 			slog.Info("using provider", "provider", provider.Name, "model", modelWithProvider.ProviderModel)
@@ -176,7 +189,8 @@ func BalanceChat(ctx context.Context, start time.Time, clientFormat string, befo
 				return nil, 0, "", err
 			}
 
-			// 成功路径：保持 reqCtx 存活，让调用方读完 res.Body 后自然释放
+			// 成功路径：将 cancel 绑定到 Body Close，调用方读完后自动释放
+			res.Body = cancelOnClose{ReadCloser: res.Body, cancel: cancel}
 			return res, logId, provider.Type, nil
 		}
 	}
@@ -322,11 +336,14 @@ func ProvidersWithMetaBymodelsName(ctx context.Context, style string, before Bef
 		if _, ok := providerMap[mp.ProviderID]; !ok {
 			continue
 		}
+		if mp.Weight <= 0 {
+			continue
+		}
 		weightItems[mp.ID] = mp.Weight
 	}
 
 	if len(weightItems) == 0 {
-		return nil, errors.New("no convertible provider for model " + before.Model)
+		return nil, errors.New("no convertible provider with positive weight for model " + before.Model)
 	}
 
 	if model.IOLog == nil {
