@@ -8,6 +8,9 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/atopos31/llmio/consts"
+	"github.com/tidwall/gjson"
 )
 
 // OpenAIToAnthropic 将 OpenAI 请求转换为 Anthropic 格式
@@ -168,4 +171,61 @@ func AnthropicSSEToOpenAI(r io.Reader, w io.Writer, model string) error {
 	}
 
 	return scanner.Err()
+}
+
+// DetectFormat 检测请求格式
+func DetectFormat(raw []byte, fallback string) string {
+	if gjson.GetBytes(raw, "input").Exists() {
+		return consts.StyleOpenAIRes
+	}
+	msg := gjson.GetBytes(raw, "messages")
+	if msg.IsArray() && msg.Get("0.content").IsArray() {
+		return consts.StyleAnthropic
+	}
+	return fallback
+}
+
+// CanConvert 判断是否支持格式转换
+func CanConvert(from, to string) bool {
+	if from == to {
+		return true
+	}
+	if from == consts.StyleOpenAI && to == consts.StyleAnthropic {
+		return true
+	}
+	return false
+}
+
+// ConvertRequest 转换请求格式
+func ConvertRequest(raw []byte, from, to string) ([]byte, error) {
+	if from == to {
+		return raw, nil
+	}
+	if from == consts.StyleOpenAI && to == consts.StyleAnthropic {
+		return OpenAIToAnthropic(raw)
+	}
+	return nil, fmt.Errorf("unsupported request convert: %s -> %s", from, to)
+}
+
+// ConvertResponse 转换响应格式（非流）
+func ConvertResponse(raw []byte, from, to, model string) ([]byte, error) {
+	if from == to {
+		return raw, nil
+	}
+	if from == consts.StyleAnthropic && to == consts.StyleOpenAI {
+		return AnthropicToOpenAI(raw, model)
+	}
+	return nil, fmt.Errorf("unsupported response convert: %s -> %s", from, to)
+}
+
+// ConvertStream 转换流式响应
+func ConvertStream(r io.Reader, w io.Writer, from, to, model string) error {
+	if from == to {
+		_, err := io.Copy(w, r)
+		return err
+	}
+	if from == consts.StyleAnthropic && to == consts.StyleOpenAI {
+		return AnthropicSSEToOpenAI(r, w, model)
+	}
+	return fmt.Errorf("unsupported stream convert: %s -> %s", from, to)
 }

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"net/http"
@@ -10,46 +11,56 @@ import (
 	"github.com/atopos31/llmio/consts"
 	"github.com/atopos31/llmio/models"
 	"github.com/atopos31/llmio/service"
+	"github.com/atopos31/llmio/service/formatx"
 	"github.com/gin-gonic/gin"
 )
 
-func ChatCompletionsHandler(c *gin.Context) {
-	chatHandler(c, service.BeforerOpenAI, service.ProcesserOpenAI, consts.StyleOpenAI)
-}
+var (
+	preProcessors = map[string]service.Beforer{
+		consts.StyleOpenAI:    service.BeforerOpenAI,
+		consts.StyleOpenAIRes: service.BeforerOpenAIRes,
+		consts.StyleAnthropic: service.BeforerAnthropic,
+	}
+	postProcessors = map[string]service.Processer{
+		consts.StyleOpenAI:    service.ProcesserOpenAI,
+		consts.StyleOpenAIRes: service.ProcesserOpenAiRes,
+		consts.StyleAnthropic: service.ProcesserAnthropic,
+	}
+)
 
-func ResponsesHandler(c *gin.Context) {
-	chatHandler(c, service.BeforerOpenAIRes, service.ProcesserOpenAiRes, consts.StyleOpenAIRes)
-}
+func ChatCompletionsHandler(c *gin.Context) { chatHandler(c, consts.StyleOpenAI) }
+func ResponsesHandler(c *gin.Context)       { chatHandler(c, consts.StyleOpenAIRes) }
+func Messages(c *gin.Context)               { chatHandler(c, consts.StyleAnthropic) }
 
-func Messages(c *gin.Context) {
-	chatHandler(c, service.BeforerAnthropic, service.ProcesserAnthropic, consts.StyleAnthropic)
-}
-
-func chatHandler(c *gin.Context, preProcessor service.Beforer, postProcessor service.Processer, style string) {
-	// 读取原始请求体
-	reqBody, err := io.ReadAll(c.Request.Body)
+func chatHandler(c *gin.Context, defaultFormat string) {
+	rawBody, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		common.InternalServerError(c, err.Error())
 		return
 	}
 	c.Request.Body.Close()
-	// 预处理、提取模型参数
-	before, err := preProcessor(reqBody)
+
+	requestFormat := formatx.DetectFormat(rawBody, defaultFormat)
+	preProcessor := preProcessors[requestFormat]
+	if preProcessor == nil {
+		common.InternalServerError(c, "unsupported request format")
+		return
+	}
+	before, err := preProcessor(rawBody)
 	if err != nil {
 		common.InternalServerError(c, err.Error())
 		return
 	}
-	// 按模型获取可用 provider
+
 	ctx := c.Request.Context()
-	providersWithMeta, err := service.ProvidersWithMetaBymodelsName(ctx, style, *before)
+	providersWithMeta, err := service.ProvidersWithMetaBymodelsName(ctx, requestFormat, *before)
 	if err != nil {
 		common.InternalServerError(c, err.Error())
 		return
 	}
 
 	startReq := time.Now()
-	// 调用负载均衡后的 provider 并转发
-	res, logId, err := service.BalanceChat(ctx, startReq, style, *before, *providersWithMeta, models.ReqMeta{
+	res, logId, providerType, err := service.BalanceChat(ctx, startReq, requestFormat, *before, *providersWithMeta, models.ReqMeta{
 		Header:    c.Request.Header,
 		RemoteIP:  c.ClientIP(),
 		UserAgent: c.Request.UserAgent(),
@@ -60,19 +71,42 @@ func chatHandler(c *gin.Context, preProcessor service.Beforer, postProcessor ser
 	}
 	defer res.Body.Close()
 
-	pr, pw := io.Pipe()
-	tee := io.TeeReader(res.Body, pw)
-	// 异步处理输出并记录 tokens
-	go service.RecordLog(context.Background(), startReq, pr, postProcessor, logId, *before, providersWithMeta.IOLog)
+	logProcessor := postProcessors[providerType]
+	if logProcessor == nil {
+		logProcessor = postProcessors[requestFormat]
+	}
 
 	writeHeader(c, before.Stream, res.Header)
-	if _, err := io.Copy(c.Writer, tee); err != nil {
-		pw.CloseWithError(err)
-		common.InternalServerError(c, err.Error())
+
+	if before.Stream {
+		pr, pw := io.Pipe()
+		reader := io.TeeReader(res.Body, pw)
+		go func() {
+			defer pw.Close()
+			if err := formatx.ConvertStream(reader, c.Writer, providerType, requestFormat, before.Model); err != nil {
+				pw.CloseWithError(err)
+			}
+		}()
+		go service.RecordLog(context.Background(), startReq, pr, logProcessor, logId, *before, providersWithMeta.IOLog)
 		return
 	}
 
-	pw.Close()
+	bodyBytes, err := io.ReadAll(res.Body)
+	if err != nil {
+		common.InternalServerError(c, err.Error())
+		return
+	}
+	go service.RecordLog(context.Background(), startReq, io.NopCloser(bytes.NewReader(bodyBytes)), logProcessor, logId, *before, providersWithMeta.IOLog)
+
+	respBody, err := formatx.ConvertResponse(bodyBytes, providerType, requestFormat, before.Model)
+	if err != nil {
+		common.InternalServerError(c, err.Error())
+		return
+	}
+	if _, err := c.Writer.Write(respBody); err != nil {
+		common.InternalServerError(c, err.Error())
+		return
+	}
 }
 
 func writeHeader(c *gin.Context, stream bool, header http.Header) {

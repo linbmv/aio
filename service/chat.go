@@ -15,11 +15,12 @@ import (
 	"github.com/atopos31/llmio/models"
 	"github.com/atopos31/llmio/providers"
 	"github.com/atopos31/llmio/service/errorx"
+	"github.com/atopos31/llmio/service/formatx"
 	"github.com/samber/lo"
 	"gorm.io/gorm"
 )
 
-func BalanceChat(ctx context.Context, start time.Time, style string, before Before, providersWithMeta ProvidersWithMeta, reqMeta models.ReqMeta) (*http.Response, uint, error) {
+func BalanceChat(ctx context.Context, start time.Time, clientFormat string, before Before, providersWithMeta ProvidersWithMeta, reqMeta models.ReqMeta) (*http.Response, uint, string, error) {
 	slog.Info("request", "model", before.Model, "stream", before.Stream, "tool_call", before.toolCall, "structured_output", before.structuredOutput, "image", before.image)
 
 	providerMap := providersWithMeta.ProviderMap
@@ -43,19 +44,33 @@ func BalanceChat(ctx context.Context, start time.Time, style string, before Befo
 
 	client := providers.GetClient(time.Second * time.Duration(providersWithMeta.TimeOut) / 3)
 
+	// 请求体转换缓存
+	reqCache := map[string][]byte{clientFormat: before.raw}
+	getReqBody := func(providerType string) ([]byte, error) {
+		if data, ok := reqCache[providerType]; ok {
+			return data, nil
+		}
+		converted, err := formatx.ConvertRequest(before.raw, clientFormat, providerType)
+		if err != nil {
+			return nil, err
+		}
+		reqCache[providerType] = converted
+		return converted, nil
+	}
+
 	timer := time.NewTimer(time.Second * time.Duration(providersWithMeta.TimeOut))
 	defer timer.Stop()
 	for retry := 0; retry < providersWithMeta.MaxRetry; retry++ {
 		select {
 		case <-ctx.Done():
-			return nil, 0, ctx.Err()
+			return nil, 0, "", ctx.Err()
 		case <-timer.C:
-			return nil, 0, errors.New("retry time out")
+			return nil, 0, "", errors.New("retry time out")
 		default:
 			// 加权负载均衡
 			id, err := balancer.Pop()
 			if err != nil {
-				return nil, 0, err
+				return nil, 0, "", err
 			}
 
 			modelWithProvider, ok := providersWithMeta.ModelWithProviderMap[id]
@@ -73,9 +88,9 @@ func BalanceChat(ctx context.Context, start time.Time, style string, before Befo
 
 			provider := providerMap[modelWithProvider.ProviderID]
 
-			chatModel, err := providers.New(style, provider.Config, provider.ID)
+			chatModel, err := providers.New(provider.Type, provider.Config, provider.ID)
 			if err != nil {
-				return nil, 0, err
+				return nil, 0, "", err
 			}
 
 			slog.Info("using provider", "provider", provider.Name, "model", modelWithProvider.ProviderModel)
@@ -85,7 +100,7 @@ func BalanceChat(ctx context.Context, start time.Time, style string, before Befo
 				ProviderModel: modelWithProvider.ProviderModel,
 				ProviderName:  provider.Name,
 				Status:        "success",
-				Style:         style,
+				Style:         clientFormat,
 				UserAgent:     reqMeta.UserAgent,
 				RemoteIP:      reqMeta.RemoteIP,
 				ChatIO:        providersWithMeta.IOLog,
@@ -106,7 +121,13 @@ func BalanceChat(ctx context.Context, start time.Time, style string, before Befo
 				},
 			}
 
-			req, usedKey, err := chatModel.BuildReq(httptrace.WithClientTrace(ctx, trace), header, modelWithProvider.ProviderModel, before.raw)
+			reqBody, err := getReqBody(provider.Type)
+			if err != nil {
+				retryLog <- log.WithError(err)
+				continue
+			}
+
+			req, usedKey, err := chatModel.BuildReq(httptrace.WithClientTrace(ctx, trace), header, modelWithProvider.ProviderModel, reqBody)
 			if err != nil {
 				retryLog <- log.WithError(err)
 				continue
@@ -145,14 +166,14 @@ func BalanceChat(ctx context.Context, start time.Time, style string, before Befo
 			logId, err := SaveChatLog(ctx, log)
 			if err != nil {
 				res.Body.Close()
-				return nil, 0, err
+				return nil, 0, "", err
 			}
 
-			return res, logId, nil
+			return res, logId, provider.Type, nil
 		}
 	}
 
-	return nil, 0, errors.New("maximum retry attempts reached")
+	return nil, 0, "", errors.New("maximum retry attempts reached")
 }
 
 func RecordRetryLog(ctx context.Context, retryLog chan models.ChatLog) {
@@ -274,13 +295,19 @@ func ProvidersWithMetaBymodelsName(ctx context.Context, style string, before Bef
 
 	providers, err := gorm.G[models.Provider](models.DB).
 		Where("id IN ?", lo.Map(modelWithProviders, func(mp models.ModelWithProvider, _ int) uint { return mp.ProviderID })).
-		Where("type = ?", style).
 		Find(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	providerMap := lo.KeyBy(providers, func(p models.Provider) uint { return p.ID })
+	// 过滤支持格式转换的 Provider
+	filtered := make([]models.Provider, 0, len(providers))
+	for _, p := range providers {
+		if formatx.CanConvert(style, p.Type) {
+			filtered = append(filtered, p)
+		}
+	}
+	providerMap := lo.KeyBy(filtered, func(p models.Provider) uint { return p.ID })
 
 	weightItems := make(map[uint]int)
 	for _, mp := range modelWithProviders {
@@ -288,6 +315,10 @@ func ProvidersWithMetaBymodelsName(ctx context.Context, style string, before Bef
 			continue
 		}
 		weightItems[mp.ID] = mp.Weight
+	}
+
+	if len(weightItems) == 0 {
+		return nil, errors.New("no convertible provider for model " + before.Model)
 	}
 
 	if model.IOLog == nil {
