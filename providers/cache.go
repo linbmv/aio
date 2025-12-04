@@ -49,11 +49,18 @@ func GetClient(responseHeaderTimeout time.Duration) *http.Client {
 		TLSHandshakeTimeout:   10 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
 		ResponseHeaderTimeout: responseHeaderTimeout,
+		MaxConnsPerHost:       50,
 	}
 
 	client := &http.Client{
 		Transport: transport,
-		Timeout:   0, // No overall timeout, let ResponseHeaderTimeout control header timing
+		Timeout:   5 * time.Minute,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 3 {
+				return http.ErrUseLastResponse
+			}
+			return nil
+		},
 	}
 
 	cache.clients[responseHeaderTimeout] = client

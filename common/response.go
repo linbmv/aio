@@ -1,6 +1,7 @@
 package common
 
 import (
+	"log/slog"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -55,10 +56,14 @@ func ErrorWithHttpStatus(c *gin.Context, httpStatus int, code int, message strin
 
 // InternalServerError 内部服务器错误
 func InternalServerError(c *gin.Context, message string) {
+	// 记录详细错误到日志
+	slog.Error("internal server error", "path", c.Request.URL.Path, "error", message)
+
+	// 对外只返回通用错误信息
 	c.JSON(http.StatusInternalServerError, Response{
 		Code:    500,
-		Error:   message,
-		Message: message,
+		Error:   "Internal server error",
+		Message: "An internal error occurred. Please try again later.",
 	})
 }
 
