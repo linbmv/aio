@@ -47,6 +47,7 @@ func main() {
 
 	authOpenAI := middleware.Auth(token)
 	authAnthropic := middleware.AuthAnthropic(token)
+	authCompat := middleware.AuthEither(token)
 	bodyLimit := middleware.LimitRequestBody(middleware.DefaultMaxBodyBytes)
 
 	openai := router.Group("/openai/v1", authOpenAI)
@@ -61,18 +62,18 @@ func main() {
 		anthropic.GET("/models", handler.AnthropicModelsHandler)
 		anthropic.POST("/messages", bodyLimit, handler.Messages)
 		// TODO
-		anthropic.POST("/messages/count_tokens", authAnthropic, bodyLimit)
+		anthropic.POST("/messages/count_tokens", bodyLimit)
 	}
 
 	// 兼容性保留
-	v1 := router.Group("/v1")
+	v1 := router.Group("/v1", authCompat)
 	{
-		v1.GET("/models", authOpenAI, handler.OpenAIModelsHandler)
-		v1.POST("/chat/completions", authOpenAI, bodyLimit, handler.ChatCompletionsHandler)
-		v1.POST("/responses", authOpenAI, bodyLimit, handler.ResponsesHandler)
-		v1.POST("/messages", authAnthropic, bodyLimit, handler.Messages)
+		v1.GET("/models", handler.OpenAIModelsHandler)
+		v1.POST("/chat/completions", bodyLimit, handler.ChatCompletionsHandler)
+		v1.POST("/responses", bodyLimit, handler.ResponsesHandler)
+		v1.POST("/messages", bodyLimit, handler.Messages)
 		// TODO
-		v1.POST("/messages/count_tokens", authAnthropic, bodyLimit)
+		v1.POST("/messages/count_tokens", bodyLimit)
 	}
 
 	api := router.Group("/api")

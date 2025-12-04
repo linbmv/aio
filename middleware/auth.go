@@ -40,6 +40,37 @@ func Auth(token string) gin.HandlerFunc {
 	}
 }
 
+// AuthEither 同时支持 Authorization Bearer 和 x-api-key（用于兼容路由）
+func AuthEither(token string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if token == "" {
+			c.Next()
+			return
+		}
+
+		apiKey := ""
+		auth := c.GetHeader("Authorization")
+		if strings.HasPrefix(auth, "Bearer ") {
+			apiKey = strings.TrimPrefix(auth, "Bearer ")
+		}
+		if apiKey == "" {
+			apiKey = c.GetHeader("x-api-key")
+		}
+
+		if apiKey == "" {
+			common.ErrorWithHttpStatus(c, http.StatusUnauthorized, http.StatusUnauthorized, "API key is missing")
+			c.Abort()
+			return
+		}
+		if apiKey != token {
+			common.ErrorWithHttpStatus(c, http.StatusUnauthorized, http.StatusUnauthorized, "Invalid token")
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
+}
+
 func AuthAnthropic(koken string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// 不设置token，则不进行验证
@@ -64,6 +95,37 @@ func AuthAnthropic(koken string) gin.HandlerFunc {
 		}
 
 		if apiKey != koken {
+			common.ErrorWithHttpStatus(c, http.StatusUnauthorized, http.StatusUnauthorized, "Invalid token")
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
+}
+
+// AuthEither 同时支持 Authorization Bearer 和 x-api-key（用于兼容路由）
+func AuthEither(token string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if token == "" {
+			c.Next()
+			return
+		}
+
+		apiKey := ""
+		auth := c.GetHeader("Authorization")
+		if strings.HasPrefix(auth, "Bearer ") {
+			apiKey = strings.TrimPrefix(auth, "Bearer ")
+		}
+		if apiKey == "" {
+			apiKey = c.GetHeader("x-api-key")
+		}
+
+		if apiKey == "" {
+			common.ErrorWithHttpStatus(c, http.StatusUnauthorized, http.StatusUnauthorized, "API key is missing")
+			c.Abort()
+			return
+		}
+		if apiKey != token {
 			common.ErrorWithHttpStatus(c, http.StatusUnauthorized, http.StatusUnauthorized, "Invalid token")
 			c.Abort()
 			return
