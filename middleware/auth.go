@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"net/http"
-	"strings"
 
 	"github.com/atopos31/llmio/common"
 	"github.com/atopos31/llmio/middleware/authx"
