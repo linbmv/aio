@@ -101,7 +101,7 @@ func BalanceChat(ctx context.Context, start time.Time, clientFormat string, befo
 
 			chatModel, err := providers.New(provider.Type, provider.Config, provider.ID)
 			if err != nil {
-				retryLog <- log.WithError(fmt.Errorf("provider init failed: %w", err))
+				slog.Error("provider init failed", "provider", provider.Name, "error", err)
 				balancer.Delete(id)
 				continue
 			}
