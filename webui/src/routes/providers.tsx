@@ -531,7 +531,7 @@ export default function ProvidersPage() {
               <FormField
                 control={form.control}
                 name="type"
-                render={({ field }) => (
+                render={() => (
                   <FormItem>
                     <FormLabel>类型</FormLabel>
                     <FormControl>
