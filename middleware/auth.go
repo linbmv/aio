@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/atopos31/llmio/common"
+	"github.com/atopos31/llmio/middleware/authx"
 	"github.com/gin-gonic/gin"
 )
 
@@ -14,22 +15,16 @@ func Auth(token string) gin.HandlerFunc {
 		if token == "" {
 			return
 		}
-		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
-			common.ErrorWithHttpStatus(c, http.StatusUnauthorized, http.StatusUnauthorized, "Authorization header is missing")
+
+		// 使用增强的认证提取，支持多种方式
+		extractedKey := authx.ExtractAPIKey(c.Request)
+		if extractedKey == "" {
+			common.ErrorWithHttpStatus(c, http.StatusUnauthorized, http.StatusUnauthorized, "API key is missing")
 			c.Abort()
 			return
 		}
 
-		parts := strings.SplitN(authHeader, " ", 2)
-		if !(len(parts) == 2 && parts[0] == "Bearer") {
-			common.ErrorWithHttpStatus(c, http.StatusUnauthorized, http.StatusUnauthorized, "Invalid authorization header")
-			c.Abort()
-			return
-		}
-
-		tokenString := parts[1]
-		if tokenString != token {
+		if extractedKey != token {
 			common.ErrorWithHttpStatus(c, http.StatusUnauthorized, http.StatusUnauthorized, "Invalid token")
 			c.Abort()
 			return
@@ -43,13 +38,16 @@ func AuthAnthropic(koken string) gin.HandlerFunc {
 		if koken == "" {
 			return
 		}
-		authHeader := c.GetHeader("x-api-key")
-		if authHeader == "" {
-			common.ErrorWithHttpStatus(c, http.StatusUnauthorized, http.StatusUnauthorized, "x-api-key header is missing")
+
+		// 使用增强的认证提取，支持多种方式
+		extractedKey := authx.ExtractAPIKey(c.Request)
+		if extractedKey == "" {
+			common.ErrorWithHttpStatus(c, http.StatusUnauthorized, http.StatusUnauthorized, "API key is missing")
 			c.Abort()
 			return
 		}
-		if authHeader != koken {
+
+		if extractedKey != koken {
 			common.ErrorWithHttpStatus(c, http.StatusUnauthorized, http.StatusUnauthorized, "Invalid token")
 			c.Abort()
 			return
