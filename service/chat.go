@@ -129,16 +129,17 @@ func BalanceChat(ctx context.Context, start time.Time, clientFormat string, befo
 
 			// 为每个请求设置超时 context
 			reqCtx, cancel := context.WithTimeout(ctx, time.Second*time.Duration(providersWithMeta.TimeOut))
-			defer cancel()
 
 			req, usedKey, err := chatModel.BuildReq(httptrace.WithClientTrace(reqCtx, trace), header, modelWithProvider.ProviderModel, reqBody)
 			if err != nil {
+				cancel()
 				retryLog <- log.WithError(err)
 				continue
 			}
 
 			res, err := client.Do(req)
 			if err != nil {
+				cancel()
 				retryLog <- log.WithError(err)
 				continue
 			}
@@ -146,6 +147,7 @@ func BalanceChat(ctx context.Context, start time.Time, clientFormat string, befo
 			if res.StatusCode != http.StatusOK {
 				byteBody, _ := io.ReadAll(res.Body)
 				res.Body.Close()
+				cancel()
 
 				classifiedErr := errorx.ClassifyHTTPError(res.StatusCode, byteBody, res.Header)
 				retryLog <- log.WithError(fmt.Errorf("status: %d, body: %s", res.StatusCode, string(byteBody)))
@@ -170,9 +172,11 @@ func BalanceChat(ctx context.Context, start time.Time, clientFormat string, befo
 			logId, err := SaveChatLog(ctx, log)
 			if err != nil {
 				res.Body.Close()
+				cancel()
 				return nil, 0, "", err
 			}
 
+			// 成功路径：保持 reqCtx 存活，让调用方读完 res.Body 后自然释放
 			return res, logId, provider.Type, nil
 		}
 	}

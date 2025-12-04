@@ -3,6 +3,7 @@ package handler
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"time"
@@ -33,12 +34,17 @@ func ResponsesHandler(c *gin.Context)       { chatHandler(c, consts.StyleOpenAIR
 func Messages(c *gin.Context)               { chatHandler(c, consts.StyleAnthropic) }
 
 func chatHandler(c *gin.Context, defaultFormat string) {
+	defer c.Request.Body.Close()
+
 	rawBody, err := io.ReadAll(c.Request.Body)
 	if err != nil {
+		if errors.Is(err, http.ErrBodyTooLarge) {
+			common.PayloadTooLarge(c, "request body too large")
+			return
+		}
 		common.InternalServerError(c, err.Error())
 		return
 	}
-	c.Request.Body.Close()
 
 	requestFormat := formatx.DetectFormat(rawBody, defaultFormat)
 	preProcessor := preProcessors[requestFormat]

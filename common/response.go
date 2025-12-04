@@ -93,3 +93,11 @@ func Forbidden(c *gin.Context, message string) {
 		Message: message,
 	})
 }
+
+// PayloadTooLarge 请求体过大
+func PayloadTooLarge(c *gin.Context, message string) {
+	c.JSON(http.StatusRequestEntityTooLarge, Response{
+		Code:    http.StatusRequestEntityTooLarge,
+		Message: message,
+	})
+}
