@@ -80,22 +80,22 @@ func main() {
 		api.GET("/providers/template", handler.GetProviderTemplates)
 		api.GET("/providers", handler.GetProviders)
 		api.GET("/providers/models/:id", handler.GetProviderModels)
-		api.POST("/providers", handler.CreateProvider)
-		api.PUT("/providers/:id", handler.UpdateProvider)
+		api.POST("/providers", bodyLimit, handler.CreateProvider)
+		api.PUT("/providers/:id", bodyLimit, handler.UpdateProvider)
 		api.DELETE("/providers/:id", handler.DeleteProvider)
 
 		// Model management
 		api.GET("/models", handler.GetModels)
-		api.POST("/models", handler.CreateModel)
-		api.PUT("/models/:id", handler.UpdateModel)
+		api.POST("/models", bodyLimit, handler.CreateModel)
+		api.PUT("/models/:id", bodyLimit, handler.UpdateModel)
 		api.DELETE("/models/:id", handler.DeleteModel)
 
 		// Model-provider association management
 		api.GET("/model-providers", handler.GetModelProviders)
 		api.GET("/model-providers/status", handler.GetModelProviderStatus)
-		api.POST("/model-providers", handler.CreateModelProvider)
-		api.PUT("/model-providers/:id", handler.UpdateModelProvider)
-		api.PATCH("/model-providers/:id/status", handler.UpdateModelProviderStatus)
+		api.POST("/model-providers", bodyLimit, handler.CreateModelProvider)
+		api.PUT("/model-providers/:id", bodyLimit, handler.UpdateModelProvider)
+		api.PATCH("/model-providers/:id/status", bodyLimit, handler.UpdateModelProviderStatus)
 		api.DELETE("/model-providers/:id", handler.DeleteModelProvider)
 
 		// System status and monitoring
@@ -105,7 +105,7 @@ func main() {
 
 		// System configuration
 		api.GET("/config", handler.GetSystemConfig)
-		api.PUT("/config", handler.UpdateSystemConfig)
+		api.PUT("/config", bodyLimit, handler.UpdateSystemConfig)
 
 		// Provider connectivity test
 		api.GET("/test/:id", handler.ProviderTestHandler)
