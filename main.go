@@ -25,16 +25,11 @@ func init() {
 	slog.Info("TZ", "time.Local", time.Local.String())
 
 	token := os.Getenv("TOKEN")
-	ginMode := os.Getenv("GIN_MODE")
 
-	// 生产环境强制要求 TOKEN
-	if token == "" && ginMode == "release" {
-		slog.Error("TOKEN is required in production mode (GIN_MODE=release)")
-		panic("TOKEN environment variable must be set in production")
-	}
-
+	// 强制要求 TOKEN，无论任何模式
 	if token == "" {
-		slog.Warn("TOKEN not set - API endpoints will be accessible without authentication (dev mode only)")
+		slog.Error("TOKEN is required - set TOKEN environment variable to secure your API")
+		panic("TOKEN environment variable must be set")
 	}
 }
 
