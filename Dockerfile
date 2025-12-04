@@ -14,7 +14,7 @@ RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
     pnpm run build
 
 # Build stage for the backend
-FROM golang:1.22 AS backend-build
+FROM golang:1.25 AS backend-build
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod \
