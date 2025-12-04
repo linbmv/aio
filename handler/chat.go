@@ -69,7 +69,6 @@ func chatHandler(c *gin.Context, defaultFormat string) {
 		common.InternalServerError(c, err.Error())
 		return
 	}
-	defer res.Body.Close()
 
 	logProcessor := postProcessors[providerType]
 	if logProcessor == nil {
@@ -82,6 +81,7 @@ func chatHandler(c *gin.Context, defaultFormat string) {
 		pr, pw := io.Pipe()
 		reader := io.TeeReader(res.Body, pw)
 		go func() {
+			defer res.Body.Close()
 			defer pw.Close()
 			if err := formatx.ConvertStream(reader, c.Writer, providerType, requestFormat, before.Model); err != nil {
 				pw.CloseWithError(err)
@@ -91,6 +91,7 @@ func chatHandler(c *gin.Context, defaultFormat string) {
 		return
 	}
 
+	defer res.Body.Close()
 	bodyBytes, err := io.ReadAll(res.Body)
 	if err != nil {
 		common.InternalServerError(c, err.Error())

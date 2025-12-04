@@ -158,7 +158,7 @@ func BalanceChat(ctx context.Context, start time.Time, clientFormat string, befo
 					providers.MarkChannelFailure(modelWithProvider.ModelID, provider.ID, 2*time.Minute)
 					balancer.Delete(id)
 				case errorx.ErrorClient:
-					return nil, 0, fmt.Errorf("client error: %s", string(byteBody))
+					return nil, 0, provider.Type, fmt.Errorf("client error: %s", string(byteBody))
 				}
 				continue
 			}
