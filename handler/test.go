@@ -14,7 +14,6 @@ import (
 	"github.com/atopos31/llmio/consts"
 	"github.com/atopos31/llmio/models"
 	"github.com/atopos31/llmio/providers"
-	"github.com/atopos31/nsxno/react"
 	"github.com/gin-gonic/gin"
 	"github.com/openai/openai-go/v2"
 	"github.com/openai/openai-go/v2/option"
@@ -117,125 +116,10 @@ func ProviderTestHandler(c *gin.Context) {
 }
 
 func TestReactHandler(c *gin.Context) {
-	ctx := c.Request.Context()
-	id := c.Param("id")
-	if id == "" {
-		common.BadRequest(c, "Invalid ID format")
-		return
-	}
-
-	chatModel, err := FindChatModel(ctx, id)
-	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			common.NotFound(c, "ModelWithProvider not found")
-			return
-		}
-		common.InternalServerError(c, "Database error")
-		return
-	}
-
-	if chatModel.Type != "openai" {
-		c.SSEvent("error", "该测试仅支持 OpenAI 类型")
-		return
-	}
-
-	var config providers.OpenAI
-	if err := json.Unmarshal([]byte(chatModel.Config), &config); err != nil {
-		common.ErrorWithHttpStatus(c, http.StatusBadRequest, 400, "Invalid config format")
-		return
-	}
-
-	client := openai.NewClient(
-		option.WithBaseURL(config.BaseURL),
-		option.WithAPIKey(config.APIKey),
-	)
-
-	agent := react.New(client, 20)
-	question := "分两次获取一下南京和北京的天气 每次调用后回复我对应城市的总结信息"
-	model := chatModel.Model
-
-	tools := []openai.ChatCompletionToolUnionParam{
-		openai.ChatCompletionFunctionTool(openai.FunctionDefinitionParam{
-			Name:        "get_weather",
-			Description: openai.String("Get weather at the given location"),
-			Parameters: openai.FunctionParameters{
-				"type": "object",
-				"properties": map[string]any{
-					"location": map[string]string{
-						"type":        "string",
-						"description": "The city name",
-					},
-				},
-				"required": []string{"location"},
-			},
-		}),
-	}
-	var checkError error
-	var toolCount int
-	var nankingCount int
-	var pekingCount int
-
-	c.SSEvent("start", fmt.Sprintf("提供商:%s 模型:%s 问题:%s", chatModel.Name, chatModel.Model, question))
-	start := time.Now()
-	for content, err := range agent.RunStream(ctx, openai.ChatCompletionNewParams{
-		Messages: []openai.ChatCompletionMessageParamUnion{
-			openai.UserMessage(question),
-		},
-		Tools: tools,
-		Model: model,
-	}, GetWeather) {
-		if err != nil {
-			c.SSEvent("error", err.Error())
-			break
-		}
-		var res string
-		switch content.Cate {
-		case "message":
-			if len(content.Chunk.Choices) > 0 {
-				res = content.Chunk.Choices[0].Delta.Content
-			}
-		case "toolcall":
-			data, err := json.Marshal(content.ToolCall.Function)
-			if err != nil {
-				c.SSEvent("error", err.Error())
-				break
-			}
-			res = string(data)
-			location := gjson.Get(content.ToolCall.Function.Arguments, "location").String()
-			if location == "南京" {
-				nankingCount++
-			}
-			if location == "北京" {
-				pekingCount++
-			}
-			if content.Step == 0 && location != "南京" {
-				checkError = errors.New("第一次应选择南京")
-			}
-			if content.Step == 1 && location != "北京" {
-				checkError = errors.New("第二次应选择北京")
-			}
-			toolCount++
-		case "toolres":
-			data, err := json.Marshal(content.ToolRes)
-			if err != nil {
-				c.SSEvent("error", err.Error())
-				break
-			}
-			res = string(data)
-		}
-		c.SSEvent(content.Cate, res)
-		c.Writer.Flush()
-	}
-	if toolCount != 2 || nankingCount != 1 || pekingCount != 1 {
-		checkError = fmt.Errorf("工具调用次数异常: 南京: %d 北京: %d 总计: %d", nankingCount, pekingCount, toolCount)
-	}
-
-	if checkError != nil {
-		c.SSEvent("error", checkError.Error())
-		c.Writer.Flush()
-		return
-	}
-	c.SSEvent("success", fmt.Sprintf("成功通过测试, 耗时: %.2fs", time.Since(start).Seconds()))
+	// 依赖 github.com/atopos31/nsxno 要求 Go >= 1.25 导致构建失败
+	// 临时禁用 React Agent 测试以恢复 CI/CD 流水线
+	c.SSEvent("error", "React agent test is temporarily disabled because github.com/atopos31/nsxno requires Go >= 1.25 which is unavailable. Re-enable after upgrading Go or replacing the dependency.")
+	c.Writer.Flush()
 }
 
 func GetWeather(ctx context.Context, call openai.ChatCompletionChunkChoiceDeltaToolCallFunction) (*openai.ChatCompletionToolMessageParamContentUnion, error) {

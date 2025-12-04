@@ -3,7 +3,6 @@ module github.com/atopos31/llmio
 go 1.23
 
 require (
-	github.com/atopos31/nsxno v0.1.1
 	github.com/gin-contrib/gzip v1.2.3
 	github.com/gin-gonic/gin v1.10.1
 	github.com/glebarez/sqlite v1.11.0
