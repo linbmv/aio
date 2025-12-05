@@ -14,135 +14,176 @@ import (
 	"github.com/tidwall/gjson"
 )
 
-// OpenAIToAnthropic 将 OpenAI 请求转换为 Anthropic 格式
+// OpenAIToAnthropic 将OpenAI 请求转换为Anthropic 格式（含多模态与tools）
 func OpenAIToAnthropic(raw []byte) ([]byte, error) {
-	var req struct {
-		Model       string `json:"model"`
-		Messages    []struct {
-			Role    string `json:"role"`
-			Content string `json:"content"`
-		} `json:"messages"`
-		MaxTokens   int     `json:"max_tokens,omitempty"`
-		Temperature float64 `json:"temperature,omitempty"`
-		Stream      bool    `json:"stream,omitempty"`
-	}
+	model := gjson.GetBytes(raw, "model").String()
+	stream := gjson.GetBytes(raw, "stream").Bool()
+	maxTokens := gjson.GetBytes(raw, "max_tokens").Int()
+	temp := gjson.GetBytes(raw, "temperature").Float()
 
-	if err := json.Unmarshal(raw, &req); err != nil {
-		return nil, err
-	}
-
-	// 提取 system 消息
 	var system string
-	var messages []map[string]interface{}
-
-	for _, msg := range req.Messages {
-		if msg.Role == "system" {
-			system = msg.Content
-		} else {
-			messages = append(messages, map[string]interface{}{
-				"role": msg.Role,
-				"content": []map[string]string{
-					{"type": "text", "text": msg.Content},
-				},
-			})
+	var messages []map[string]any
+	gjson.GetBytes(raw, "messages").ForEach(func(_, m gjson.Result) bool {
+		role := m.Get("role").String()
+		content := m.Get("content")
+		if role == "system" {
+			system = content.String()
+			return true
 		}
-	}
+		var blocks []map[string]any
+		if content.IsArray() {
+			content.ForEach(func(_, c gjson.Result) bool {
+				switch c.Get("type").String() {
+				case "text":
+					blocks = append(blocks, map[string]any{"type": "text", "text": c.Get("text").String()})
+				case "image_url":
+					blocks = append(blocks, map[string]any{
+						"type":   "image",
+						"source": map[string]any{"type": "base64", "media_type": c.Get("image_url.detail").String(), "data": c.Get("image_url.url").String()},
+					})
+				}
+				return true
+			})
+		} else {
+			blocks = append(blocks, map[string]any{"type": "text", "text": content.String()})
+		}
+		messages = append(messages, map[string]any{"role": role, "content": blocks})
+		return true
+	})
 
-	anthReq := map[string]interface{}{
-		"model":    req.Model,
+	var tools []map[string]any
+	gjson.GetBytes(raw, "tools").ForEach(func(_, t gjson.Result) bool {
+		if t.Get("type").String() != "function" {
+			return true
+		}
+		tools = append(tools, map[string]any{
+			"name":         t.Get("function.name").String(),
+			"description":  t.Get("function.description").String(),
+			"input_schema": t.Get("function.parameters").Value(),
+		})
+		return true
+	})
+
+	payload := map[string]any{
+		"model":    model,
 		"messages": messages,
-		"stream":   req.Stream,
+		"stream":   stream,
 	}
-
 	if system != "" {
-		anthReq["system"] = system
+		payload["system"] = system
 	}
-	if req.MaxTokens > 0 {
-		anthReq["max_tokens"] = req.MaxTokens
+	if maxTokens > 0 {
+		payload["max_tokens"] = maxTokens
 	}
-	if req.Temperature > 0 {
-		anthReq["temperature"] = req.Temperature
+	if temp > 0 {
+		payload["temperature"] = temp
 	}
-
-	return json.Marshal(anthReq)
+	if len(tools) > 0 {
+		payload["tools"] = tools
+	}
+	return json.Marshal(payload)
 }
 
-// AnthropicToOpenAIReq 将 Anthropic 请求转换为 OpenAI 格式
+// AnthropicToOpenAIReq 将Anthropic 请求转换为OpenAI 格式（保留多模态）
 func AnthropicToOpenAIReq(raw []byte) ([]byte, error) {
 	system := gjson.GetBytes(raw, "system").String()
 	model := gjson.GetBytes(raw, "model").String()
 	stream := gjson.GetBytes(raw, "stream").Bool()
 
-	var messages []map[string]string
+	var messages []map[string]any
 	if system != "" {
-		messages = append(messages, map[string]string{"role": "system", "content": system})
+		messages = append(messages, map[string]any{"role": "system", "content": system})
 	}
 
 	gjson.GetBytes(raw, "messages").ForEach(func(_, msg gjson.Result) bool {
 		role := msg.Get("role").String()
-		var content string
-		if msg.Get("content").IsArray() {
-			content = msg.Get("content.0.text").String()
-		} else {
-			content = msg.Get("content").String()
+		content := msg.Get("content")
+		if !content.IsArray() {
+			messages = append(messages, map[string]any{"role": role, "content": content.String()})
+			return true
 		}
-		messages = append(messages, map[string]string{"role": role, "content": content})
+		var blocks []map[string]any
+		content.ForEach(func(_, c gjson.Result) bool {
+			switch c.Get("type").String() {
+			case "text":
+				blocks = append(blocks, map[string]any{"type": "text", "text": c.Get("text").String()})
+			case "image":
+				blocks = append(blocks, map[string]any{"type": "image_url", "image_url": map[string]any{"url": c.Get("source.data").String(), "detail": c.Get("source.media_type").String()}})
+			}
+			return true
+		})
+		messages = append(messages, map[string]any{"role": role, "content": blocks})
 		return true
 	})
 
-	return json.Marshal(map[string]interface{}{
+	return json.Marshal(map[string]any{
 		"model":    model,
 		"messages": messages,
 		"stream":   stream,
 	})
 }
 
-// AnthropicToOpenAI 将 Anthropic 响应转换为 OpenAI 格式
+// AnthropicToOpenAI 将Anthropic 响应转换为OpenAI 格式（含tool_calls/finish_reason/usage）
 func AnthropicToOpenAI(raw []byte, model string) ([]byte, error) {
-	var resp struct {
-		ID      string `json:"id"`
-		Model   string `json:"model"`
-		Content []struct {
-			Text string `json:"text"`
-		} `json:"content"`
-		Usage struct {
-			InputTokens  int `json:"input_tokens"`
-			OutputTokens int `json:"output_tokens"`
-		} `json:"usage"`
+	id := gjson.GetBytes(raw, "id").String()
+	stop := gjson.GetBytes(raw, "stop_reason").String()
+	content := gjson.GetBytes(raw, "content")
+
+	var textParts []string
+	var toolCalls []map[string]any
+	content.ForEach(func(_, c gjson.Result) bool {
+		switch c.Get("type").String() {
+		case "text":
+			textParts = append(textParts, c.Get("text").String())
+		case "tool_use":
+			toolCalls = append(toolCalls, map[string]any{
+				"id":   c.Get("id").String(),
+				"type": "function",
+				"function": map[string]any{
+					"name": c.Get("name").String(),
+					"arguments": func() string {
+						if c.Get("input").Exists() && !c.Get("input").IsArray() {
+							b, _ := json.Marshal(c.Get("input").Value())
+							return string(b)
+						}
+						return "{}"
+					}(),
+				},
+			})
+		}
+		return true
+	})
+
+	finish := "stop"
+	if stop == "tool_use" {
+		finish = "tool_calls"
+	} else if stop != "" {
+		finish = stop
 	}
 
-	if err := json.Unmarshal(raw, &resp); err != nil {
-		return nil, err
+	usage := map[string]int64{
+		"prompt_tokens":     gjson.GetBytes(raw, "usage.input_tokens").Int(),
+		"completion_tokens": gjson.GetBytes(raw, "usage.output_tokens").Int(),
+	}
+	usage["total_tokens"] = usage["prompt_tokens"] + usage["completion_tokens"]
+
+	msg := map[string]any{
+		"role":    "assistant",
+		"content": strings.Join(textParts, ""),
+	}
+	if len(toolCalls) > 0 {
+		msg["tool_calls"] = toolCalls
 	}
 
-	var content string
-	if len(resp.Content) > 0 {
-		content = resp.Content[0].Text
-	}
-
-	openaiResp := map[string]interface{}{
-		"id":      resp.ID,
+	resp := map[string]any{
+		"id":      id,
 		"object":  "chat.completion",
 		"created": time.Now().Unix(),
 		"model":   model,
-		"choices": []map[string]interface{}{
-			{
-				"index": 0,
-				"message": map[string]string{
-					"role":    "assistant",
-					"content": content,
-				},
-				"finish_reason": "stop",
-			},
-		},
-		"usage": map[string]int{
-			"prompt_tokens":     resp.Usage.InputTokens,
-			"completion_tokens": resp.Usage.OutputTokens,
-			"total_tokens":      resp.Usage.InputTokens + resp.Usage.OutputTokens,
-		},
+		"choices": []map[string]any{{"index": 0, "message": msg, "finish_reason": finish}},
+		"usage":   usage,
 	}
-
-	return json.Marshal(openaiResp)
+	return json.Marshal(resp)
 }
 
 // AnthropicSSEToOpenAI 将 Anthropic SSE 流转换为 OpenAI SSE 格式
@@ -153,103 +194,74 @@ func AnthropicSSEToOpenAI(r io.Reader, w io.Writer, model string) error {
 	chunkID := fmt.Sprintf("chatcmpl-%d", time.Now().Unix())
 	created := time.Now().Unix()
 	firstChunk := true
+	var usage map[string]any
+
+	flush := func(payload map[string]any) {
+		b, _ := json.Marshal(payload)
+		fmt.Fprintf(w, "data: %s\n\n", b)
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+	}
 
 	for scanner.Scan() {
 		line := scanner.Text()
-
 		if strings.HasPrefix(line, "event:") {
 			eventType = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
 			continue
 		}
-
-		if strings.HasPrefix(line, "data:") {
-			data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
-
-			switch eventType {
-			case "message_start", "content_block_start", "content_block_stop", "message_delta":
-				// 忽略这些事件
+		if !strings.HasPrefix(line, "data:") {
+			continue
+		}
+		data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		switch eventType {
+		case "message_delta":
+			if u := gjson.Get(data, "usage"); u.Exists() {
+				usage = u.Value().(map[string]any)
+			}
+		case "content_block_delta":
+			text := gjson.Get(data, "delta.text").String()
+			if text == "" {
 				continue
-
-			case "content_block_delta":
-				var delta struct {
-					Delta struct {
-						Text string `json:"text"`
-					} `json:"delta"`
-				}
-				if err := json.Unmarshal([]byte(data), &delta); err != nil {
-					return fmt.Errorf("anthropic stream decode error: %w", err)
-				}
-				if delta.Delta.Text != "" {
-					if firstChunk {
-						roleChunk := map[string]interface{}{
-							"id":      chunkID,
-							"object":  "chat.completion.chunk",
-							"created": created,
-							"model":   model,
-							"choices": []map[string]interface{}{
-								{
-									"index":         0,
-									"delta":         map[string]string{"role": "assistant"},
-									"finish_reason": nil,
-								},
-							},
-						}
-						roleBytes, _ := json.Marshal(roleChunk)
-						fmt.Fprintf(w, "data: %s\n\n", roleBytes)
-						if flusher, ok := w.(http.Flusher); ok {
-							flusher.Flush()
-						}
-						firstChunk = false
-					}
-
-					chunk := map[string]interface{}{
-						"id":      chunkID,
-						"object":  "chat.completion.chunk",
-						"created": created,
-						"model":   model,
-						"choices": []map[string]interface{}{
-							{
-								"index":         0,
-								"delta":         map[string]string{"content": delta.Delta.Text},
-								"finish_reason": nil,
-							},
-						},
-					}
-					chunkBytes, _ := json.Marshal(chunk)
-					fmt.Fprintf(w, "data: %s\n\n", chunkBytes)
-					if flusher, ok := w.(http.Flusher); ok {
-						flusher.Flush()
-					}
-				}
-
-			case "message_stop":
-				finalChunk := map[string]interface{}{
+			}
+			if firstChunk {
+				flush(map[string]any{
 					"id":      chunkID,
 					"object":  "chat.completion.chunk",
 					"created": created,
 					"model":   model,
-					"choices": []map[string]interface{}{
-						{
-							"index":         0,
-							"delta":         map[string]interface{}{},
-							"finish_reason": "stop",
-						},
-					},
-				}
-				finalBytes, _ := json.Marshal(finalChunk)
-				fmt.Fprintf(w, "data: %s\n\n", finalBytes)
-				fmt.Fprintf(w, "data: [DONE]\n\n")
-				if flusher, ok := w.(http.Flusher); ok {
-					flusher.Flush()
-				}
-				return nil
-
-			case "error":
-				return fmt.Errorf("anthropic stream error: %s", data)
+					"choices": []map[string]any{{"index": 0, "delta": map[string]string{"role": "assistant"}, "finish_reason": nil}},
+				})
+				firstChunk = false
 			}
+			flush(map[string]any{
+				"id":      chunkID,
+				"object":  "chat.completion.chunk",
+				"created": created,
+				"model":   model,
+				"choices": []map[string]any{{"index": 0, "delta": map[string]string{"content": text}, "finish_reason": nil}},
+			})
+		case "message_stop":
+			final := map[string]any{
+				"id":      chunkID,
+				"object":  "chat.completion.chunk",
+				"created": created,
+				"model":   model,
+				"choices": []map[string]any{{"index": 0, "delta": map[string]any{}, "finish_reason": "stop"}},
+			}
+			if usage != nil {
+				final["usage"] = usage
+			}
+			flush(final)
+			fmt.Fprintf(w, "data: [DONE]\n\n")
+			if f, ok := w.(http.Flusher); ok {
+				f.Flush()
+			}
+			return nil
+		case "error":
+			return fmt.Errorf("anthropic stream error: %s", data)
 		}
 	}
-
 	if err := scanner.Err(); err != nil {
 		return fmt.Errorf("anthropic stream read error: %w", err)
 	}

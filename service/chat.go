@@ -163,7 +163,7 @@ func BalanceChat(ctx context.Context, start time.Time, clientFormat string, befo
 			}
 
 			if res.StatusCode != http.StatusOK {
-				byteBody, _ := io.ReadAll(res.Body)
+				byteBody, _ := io.ReadAll(io.LimitReader(res.Body, 64*1024))
 				res.Body.Close()
 				cancel()
 
@@ -178,8 +178,11 @@ func BalanceChat(ctx context.Context, start time.Time, clientFormat string, befo
 					if classifiedErr.Code == "rate_limit_key" {
 						balancer.Reduce(id)
 					}
+					if !classifiedErr.Retryable {
+						return nil, 0, provider.Type, fmt.Errorf("key error (non-retryable): %s", string(byteBody))
+					}
 				case errorx.ErrorChannel:
-					providers.MarkChannelFailure(modelWithProvider.ModelID, provider.ID, 2*time.Minute)
+					providers.MarkChannelFailure(modelWithProvider.ModelID, provider.ID, 0)
 					balancer.Delete(id)
 				case errorx.ErrorClient:
 					return nil, 0, provider.Type, fmt.Errorf("client error: %s", string(byteBody))

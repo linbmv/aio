@@ -7,22 +7,31 @@ import (
 )
 
 type channelCooldownManager struct {
-	mu       sync.RWMutex
-	expireAt map[string]time.Time
+	mu           sync.RWMutex
+	expireAt     map[string]time.Time
+	failureCount map[string]int
+	base         time.Duration
 }
 
 func newChannelCooldownManager() *channelCooldownManager {
 	return &channelCooldownManager{
-		expireAt: make(map[string]time.Time),
+		expireAt:     make(map[string]time.Time),
+		failureCount: make(map[string]int),
+		base:         30 * time.Second,
 	}
 }
 
 func (m *channelCooldownManager) mark(id string, d time.Duration) {
-	if id == "" || d <= 0 {
+	if id == "" {
 		return
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	count := m.failureCount[id] + 1
+	m.failureCount[id] = count
+	if d <= 0 {
+		d = calculateBackoff(m.base, count)
+	}
 	m.expireAt[id] = time.Now().Add(d)
 }
 
@@ -41,6 +50,7 @@ func (m *channelCooldownManager) isCooling(id string, now time.Time) bool {
 	}
 	m.mu.Lock()
 	delete(m.expireAt, id)
+	delete(m.failureCount, id)
 	m.mu.Unlock()
 	return false
 }
@@ -52,6 +62,7 @@ func (m *channelCooldownManager) cleanup() {
 	for id, expireAt := range m.expireAt {
 		if expireAt.Before(now) {
 			delete(m.expireAt, id)
+			delete(m.failureCount, id)
 		}
 	}
 }

@@ -34,6 +34,16 @@ func ClassifyHTTPError(status int, body []byte, header http.Header) ClassifiedEr
 
 	switch status {
 	case 400, 422:
+		// 先检查是否为key失效错误
+		if pErr.Code == "invalid_api_key" || pErr.Type == "authentication_error" ||
+			strings.Contains(bodyStr, "invalid") || strings.Contains(bodyStr, "expired") {
+			return ClassifiedError{
+				Level:      ErrorKey,
+				HTTPStatus: status,
+				Code:       "key_invalid",
+				Retryable:  true,
+			}
+		}
 		return ClassifiedError{
 			Level:      ErrorClient,
 			HTTPStatus: status,
@@ -92,20 +102,23 @@ func ClassifyHTTPError(status int, body []byte, header http.Header) ClassifiedEr
 			Retryable:  true,
 		}
 	default:
+		// 先检查key失效
+		if pErr.Code == "invalid_api_key" || pErr.Type == "authentication_error" ||
+			strings.Contains(bodyStr, "invalid") || strings.Contains(bodyStr, "expired") {
+			return ClassifiedError{
+				Level:      ErrorKey,
+				HTTPStatus: status,
+				Code:       "key_invalid",
+				Retryable:  true,
+			}
+		}
+		// 再判断客户端错误
 		if status >= 400 && status < 500 {
 			return ClassifiedError{
 				Level:      ErrorClient,
 				HTTPStatus: status,
 				Code:       "client_error",
 				Retryable:  false,
-			}
-		}
-		if strings.Contains(bodyStr, "invalid") || strings.Contains(bodyStr, "expired") {
-			return ClassifiedError{
-				Level:      ErrorKey,
-				HTTPStatus: status,
-				Code:       "key_invalid",
-				Retryable:  true,
 			}
 		}
 		return ClassifiedError{
