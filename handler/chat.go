@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -91,17 +92,29 @@ func chatHandler(c *gin.Context, defaultFormat string) {
 	writeHeader(c, before.Stream, res.Header)
 
 	if before.Stream {
+		// 流式响应保持 handler 存活，避免请求 context 被提前取消导致转换中断
+		streamCtx, streamCancel := context.WithCancel(context.WithoutCancel(ctx))
+		defer streamCancel()
+
+		go func() {
+			<-ctx.Done()
+			streamCancel()
+		}()
+
 		pr, pw := io.Pipe()
 		reader := io.TeeReader(res.Body, pw)
-		go func() {
-			defer res.Body.Close()
-			if err := formatx.ConvertStream(ctx, reader, c.Writer, providerType, requestFormat, before.Model); err != nil {
-				pw.CloseWithError(err)
-				return
-			}
-			pw.Close()
-		}()
+		defer res.Body.Close()
+
 		go service.RecordLog(context.Background(), startReq, pr, logProcessor, logId, *before, providersWithMeta.IOLog)
+
+		if err := formatx.ConvertStream(streamCtx, reader, c.Writer, providerType, requestFormat, before.Model); err != nil {
+			pw.CloseWithError(err)
+			if !errors.Is(err, context.Canceled) && !errors.Is(err, http.ErrAbortHandler) && !errors.Is(err, io.ErrClosedPipe) {
+				slog.Error("convert stream error", "error", err)
+			}
+			return
+		}
+		pw.Close()
 		return
 	}
 

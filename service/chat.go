@@ -240,11 +240,19 @@ func RecordLog(ctx context.Context, reqStart time.Time, reader io.ReadCloser, pr
 		return nil
 	}
 	if err := recordFunc(); err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, io.ErrClosedPipe) {
+			return
+		}
 		slog.Error("record log error", "error", err)
 	}
 }
 
 func SaveChatLog(ctx context.Context, log models.ChatLog) (uint, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	} else {
+		ctx = context.WithoutCancel(ctx)
+	}
 	if err := gorm.G[models.ChatLog](models.DB).Create(ctx, &log); err != nil {
 		return 0, err
 	}

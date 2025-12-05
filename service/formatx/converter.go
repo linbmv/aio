@@ -508,31 +508,50 @@ func ConvertResponse(raw []byte, from, to, model string) ([]byte, error) {
 	return nil, fmt.Errorf("unsupported response convert: %s -> %s", from, to)
 }
 
+type contextReader struct {
+	ctx    context.Context
+	reader io.Reader
+}
+
+// 在读取前检查 context，确保客户端断连或取消时尽快退出转换
+func (r contextReader) Read(p []byte) (int, error) {
+	select {
+	case <-r.ctx.Done():
+		return 0, r.ctx.Err()
+	default:
+		return r.reader.Read(p)
+	}
+}
+
 // ConvertStream 转换流式响应
 func ConvertStream(ctx context.Context, r io.Reader, w io.Writer, from, to, model string) error {
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	default:
+	streamReader := r
+	if ctx != nil {
+		streamReader = contextReader{ctx: ctx, reader: r}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
 	}
 
 	if from == to {
-		_, err := io.Copy(w, r)
+		_, err := io.Copy(w, streamReader)
 		return err
 	}
 	switch {
 	case from == consts.StyleAnthropic && to == consts.StyleOpenAI:
-		return AnthropicSSEToOpenAI(r, w, model)
+		return AnthropicSSEToOpenAI(streamReader, w, model)
 	case from == consts.StyleAnthropic && to == consts.StyleOpenAIRes:
-		return AnthropicSSEToOpenAIRes(r, w, model)
+		return AnthropicSSEToOpenAIRes(streamReader, w, model)
 	case from == consts.StyleOpenAI && to == consts.StyleOpenAIRes:
-		return OpenAISSEToOpenAIRes(r, w, model)
+		return OpenAISSEToOpenAIRes(streamReader, w, model)
 	case from == consts.StyleOpenAI && to == consts.StyleAnthropic:
-		return OpenAISSEToAnthropic(r, w, model)
+		return OpenAISSEToAnthropic(streamReader, w, model)
 	case from == consts.StyleOpenAIRes && to == consts.StyleOpenAI:
-		return OpenAIResSSEToOpenAI(r, w, model)
+		return OpenAIResSSEToOpenAI(streamReader, w, model)
 	case from == consts.StyleOpenAIRes && to == consts.StyleAnthropic:
-		return OpenAIResSSEToAnthropic(r, w, model)
+		return OpenAIResSSEToAnthropic(streamReader, w, model)
 	}
 	return fmt.Errorf("unsupported stream convert: %s -> %s", from, to)
 }
