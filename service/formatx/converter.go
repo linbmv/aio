@@ -536,8 +536,11 @@ func ConvertStream(ctx context.Context, r io.Reader, w io.Writer, from, to, mode
 	}
 
 	if from == to {
-		_, err := io.Copy(w, streamReader)
-		return err
+		n, err := io.Copy(w, streamReader)
+		if err != nil {
+			return fmt.Errorf("stream copy failed after %d bytes: %w", n, err)
+		}
+		return nil
 	}
 	switch {
 	case from == consts.StyleAnthropic && to == consts.StyleOpenAI:
