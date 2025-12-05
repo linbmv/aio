@@ -99,7 +99,7 @@ func chatHandler(c *gin.Context, defaultFormat string) {
 				pw.CloseWithError(err)
 			}
 		}()
-		go service.RecordLog(ctx, startReq, pr, logProcessor, logId, *before, providersWithMeta.IOLog)
+		go service.RecordLog(context.Background(), startReq, pr, logProcessor, logId, *before, providersWithMeta.IOLog)
 		return
 	}
 
