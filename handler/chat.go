@@ -87,6 +87,7 @@ func chatHandler(c *gin.Context, defaultFormat string) {
 		logProcessor = postProcessors[requestFormat]
 	}
 
+	c.Status(res.StatusCode)
 	writeHeader(c, before.Stream, res.Header)
 
 	if before.Stream {
@@ -94,10 +95,11 @@ func chatHandler(c *gin.Context, defaultFormat string) {
 		reader := io.TeeReader(res.Body, pw)
 		go func() {
 			defer res.Body.Close()
-			defer pw.Close()
 			if err := formatx.ConvertStream(ctx, reader, c.Writer, providerType, requestFormat, before.Model); err != nil {
 				pw.CloseWithError(err)
+				return
 			}
+			pw.Close()
 		}()
 		go service.RecordLog(context.Background(), startReq, pr, logProcessor, logId, *before, providersWithMeta.IOLog)
 		return
