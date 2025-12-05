@@ -66,11 +66,15 @@ func chatHandler(c *gin.Context, defaultFormat string) {
 	}
 
 	ctx := c.Request.Context()
+	slog.Info("chat handler start", "format", requestFormat, "model", before.Model)
+
 	providersWithMeta, err := service.ProvidersWithMetaBymodelsName(ctx, requestFormat, *before)
 	if err != nil {
+		slog.Error("failed to get providers", "error", err)
 		common.InternalServerError(c, err.Error())
 		return
 	}
+	slog.Info("providers loaded", "count", len(providersWithMeta.ProviderMap))
 
 	startReq := time.Now()
 	res, logId, providerType, err := service.BalanceChat(ctx, startReq, requestFormat, *before, *providersWithMeta, models.ReqMeta{
@@ -79,9 +83,11 @@ func chatHandler(c *gin.Context, defaultFormat string) {
 		UserAgent: c.Request.UserAgent(),
 	})
 	if err != nil {
+		slog.Error("balance chat failed", "error", err)
 		common.InternalServerError(c, err.Error())
 		return
 	}
+	slog.Info("got response from provider", "status", res.StatusCode, "provider", providerType)
 
 	logProcessor := postProcessors[providerType]
 	if logProcessor == nil {
@@ -92,12 +98,14 @@ func chatHandler(c *gin.Context, defaultFormat string) {
 	writeHeader(c, before.Stream, res.Header)
 
 	if before.Stream {
+		slog.Info("starting stream response")
 		// 流式响应保持 handler 存活，避免请求 context 被提前取消导致转换中断
 		streamCtx, streamCancel := context.WithCancel(context.WithoutCancel(ctx))
 		defer streamCancel()
 
 		go func() {
 			<-ctx.Done()
+			slog.Info("request context done, canceling stream")
 			streamCancel()
 		}()
 
@@ -107,6 +115,7 @@ func chatHandler(c *gin.Context, defaultFormat string) {
 
 		go service.RecordLog(context.Background(), startReq, pr, logProcessor, logId, *before, providersWithMeta.IOLog)
 
+		slog.Info("starting stream conversion")
 		if err := formatx.ConvertStream(streamCtx, reader, c.Writer, providerType, requestFormat, before.Model); err != nil {
 			pw.CloseWithError(err)
 			if !errors.Is(err, context.Canceled) && !errors.Is(err, http.ErrAbortHandler) && !errors.Is(err, io.ErrClosedPipe) {
@@ -114,6 +123,7 @@ func chatHandler(c *gin.Context, defaultFormat string) {
 			}
 			return
 		}
+		slog.Info("stream conversion completed successfully")
 		pw.Close()
 		return
 	}
