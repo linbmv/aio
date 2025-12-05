@@ -14,6 +14,17 @@ import (
 	"github.com/tidwall/gjson"
 )
 
+// safeFlush 在刷新过程中捕获 panic，避免 SSE 连接异常导致进程崩溃
+func safeFlush(w io.Writer) {
+	if f, ok := w.(http.Flusher); ok {
+		defer func() {
+			if recover() != nil {
+			}
+		}()
+		f.Flush()
+	}
+}
+
 // OpenAIToAnthropic 将OpenAI 请求转换为Anthropic 格式（含多模态与tools）
 func OpenAIToAnthropic(raw []byte) ([]byte, error) {
 	model := gjson.GetBytes(raw, "model").String()
@@ -199,9 +210,7 @@ func AnthropicSSEToOpenAI(r io.Reader, w io.Writer, model string) error {
 	flush := func(payload map[string]any) {
 		b, _ := json.Marshal(payload)
 		fmt.Fprintf(w, "data: %s\n\n", b)
-		if f, ok := w.(http.Flusher); ok {
-			f.Flush()
-		}
+		safeFlush(w)
 	}
 
 	for scanner.Scan() {
@@ -254,9 +263,7 @@ func AnthropicSSEToOpenAI(r io.Reader, w io.Writer, model string) error {
 			}
 			flush(final)
 			fmt.Fprintf(w, "data: [DONE]\n\n")
-			if f, ok := w.(http.Flusher); ok {
-				f.Flush()
-			}
+			safeFlush(w)
 			return nil
 		case "error":
 			return fmt.Errorf("anthropic stream error: %s", data)
@@ -302,9 +309,7 @@ func AnthropicSSEToOpenAIRes(r io.Reader, w io.Writer, model string) error {
 
 			case "message_stop":
 				fmt.Fprintf(w, "data: [DONE]\n\n")
-				if flusher, ok := w.(http.Flusher); ok {
-					flusher.Flush()
-				}
+				safeFlush(w)
 				return nil
 
 			case "error":
@@ -575,9 +580,7 @@ func OpenAISSEToAnthropic(r io.Reader, w io.Writer, model string) error {
 		data, _ := json.Marshal(evt)
 		fmt.Fprintf(w, "event: %s\n", evt["type"])
 		fmt.Fprintf(w, "data: %s\n\n", data)
-		if f, ok := w.(http.Flusher); ok {
-			f.Flush()
-		}
+		safeFlush(w)
 	}
 	for scanner.Scan() {
 		line := strings.TrimPrefix(scanner.Text(), "data: ")
@@ -599,17 +602,13 @@ func OpenAISSEToAnthropic(r io.Reader, w io.Writer, model string) error {
 		data, _ := json.Marshal(evt)
 		fmt.Fprintf(w, "event: content_block_delta\n")
 		fmt.Fprintf(w, "data: %s\n\n", data)
-		if f, ok := w.(http.Flusher); ok {
-			f.Flush()
-		}
+		safeFlush(w)
 	}
 	for _, evt := range []map[string]any{{"type": "content_block_stop", "index": 0}, {"type": "message_stop", "stop_reason": "end_turn", "id": msgID}} {
 		data, _ := json.Marshal(evt)
 		fmt.Fprintf(w, "event: %s\n", evt["type"])
 		fmt.Fprintf(w, "data: %s\n\n", data)
-		if f, ok := w.(http.Flusher); ok {
-			f.Flush()
-		}
+		safeFlush(w)
 	}
 	return scanner.Err()
 }
@@ -625,9 +624,7 @@ func OpenAIResSSEToAnthropic(r io.Reader, w io.Writer, model string) error {
 		data, _ := json.Marshal(evt)
 		fmt.Fprintf(w, "event: %s\n", evt["type"])
 		fmt.Fprintf(w, "data: %s\n\n", data)
-		if f, ok := w.(http.Flusher); ok {
-			f.Flush()
-		}
+		safeFlush(w)
 	}
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -653,17 +650,13 @@ func OpenAIResSSEToAnthropic(r io.Reader, w io.Writer, model string) error {
 		payload, _ := json.Marshal(evt)
 		fmt.Fprintf(w, "event: content_block_delta\n")
 		fmt.Fprintf(w, "data: %s\n\n", payload)
-		if f, ok := w.(http.Flusher); ok {
-			f.Flush()
-		}
+		safeFlush(w)
 	}
 	for _, evt := range []map[string]any{{"type": "content_block_stop", "index": 0}, {"type": "message_stop", "stop_reason": "end_turn", "id": msgID}} {
 		payload, _ := json.Marshal(evt)
 		fmt.Fprintf(w, "event: %s\n", evt["type"])
 		fmt.Fprintf(w, "data: %s\n\n", payload)
-		if f, ok := w.(http.Flusher); ok {
-			f.Flush()
-		}
+		safeFlush(w)
 	}
 	return scanner.Err()
 }
@@ -684,18 +677,14 @@ func OpenAISSEToOpenAIRes(r io.Reader, w io.Writer, model string) error {
 		}
 		if line == "[DONE]" {
 			fmt.Fprint(w, "data: [DONE]\n\n")
-			if f, ok := w.(http.Flusher); ok {
-				f.Flush()
-			}
+			safeFlush(w)
 			return nil
 		}
 		content := gjson.Get(line, "choices.0.delta.content").String()
 		if content != "" {
 			payload, _ := json.Marshal(map[string]any{"model": model, "output": content})
 			fmt.Fprintf(w, "data: %s\n\n", payload)
-			if f, ok := w.(http.Flusher); ok {
-				f.Flush()
-			}
+			safeFlush(w)
 		}
 	}
 	return scanner.Err()
@@ -719,9 +708,7 @@ func OpenAIResSSEToOpenAI(r io.Reader, w io.Writer, model string) error {
 		}
 		if data == "[DONE]" {
 			fmt.Fprint(w, "data: [DONE]\n\n")
-			if f, ok := w.(http.Flusher); ok {
-				f.Flush()
-			}
+			safeFlush(w)
 			return nil
 		}
 		content := gjson.Get(data, "output").String()
@@ -739,9 +726,7 @@ func OpenAIResSSEToOpenAI(r io.Reader, w io.Writer, model string) error {
 			}
 			payload, _ := json.Marshal(chunk)
 			fmt.Fprintf(w, "data: %s\n\n", payload)
-			if f, ok := w.(http.Flusher); ok {
-				f.Flush()
-			}
+			safeFlush(w)
 		}
 	}
 	return scanner.Err()
