@@ -382,17 +382,61 @@ func OpenAIResToOpenAIResp(raw []byte, model string) ([]byte, error) {
 	})
 }
 
-// CanConvert 判断是否支持格式转换
-func CanConvert(from, to string) bool {
-	if from == to {
-		return true
+// CanConvertRequest 判断请求格式是否可以转换（客户端 -> Provider）
+func CanConvertRequest(from, to string) bool {
+	supported := map[string]map[string]bool{
+		consts.StyleOpenAI: {
+			consts.StyleOpenAIRes: true,
+			consts.StyleAnthropic: true,
+		},
+		consts.StyleOpenAIRes: {
+			consts.StyleOpenAI:    true,
+			consts.StyleAnthropic: true,
+		},
+		consts.StyleAnthropic: {
+			consts.StyleOpenAI:    true,
+			consts.StyleOpenAIRes: true,
+		},
 	}
-	validFormats := map[string]bool{
-		consts.StyleOpenAI:    true,
-		consts.StyleAnthropic: true,
-		consts.StyleOpenAIRes: true,
+	return from == to || supported[from][to]
+}
+
+// CanConvertResponse 判断非流响应是否可以转换（Provider -> 客户端）
+func CanConvertResponse(from, to string) bool {
+	supported := map[string]map[string]bool{
+		consts.StyleAnthropic: {
+			consts.StyleOpenAI:    true,
+			consts.StyleOpenAIRes: true,
+		},
+		consts.StyleOpenAI: {
+			consts.StyleOpenAIRes: true,
+			consts.StyleAnthropic: true,
+		},
+		consts.StyleOpenAIRes: {
+			consts.StyleOpenAI:    true,
+			consts.StyleAnthropic: true,
+		},
 	}
-	return validFormats[from] && validFormats[to]
+	return from == to || supported[from][to]
+}
+
+// CanConvertStream 判断流式响应是否可以转换（Provider -> 客户端）
+func CanConvertStream(from, to string) bool {
+	supported := map[string]map[string]bool{
+		consts.StyleAnthropic: {
+			consts.StyleOpenAI:    true,
+			consts.StyleOpenAIRes: true,
+		},
+		consts.StyleOpenAI: {
+			consts.StyleOpenAIRes: true,
+			consts.StyleAnthropic: true,
+		},
+		consts.StyleOpenAIRes: {
+			consts.StyleOpenAI:    true,
+			consts.StyleAnthropic: true,
+		},
+	}
+	return from == to || supported[from][to]
 }
 
 // ConvertRequest 转换请求格式
@@ -438,11 +482,11 @@ func ConvertResponse(raw []byte, from, to, model string) ([]byte, error) {
 	case from == consts.StyleOpenAI && to == consts.StyleOpenAIRes:
 		return OpenAIRespToOpenAIRes(raw, model)
 	case from == consts.StyleOpenAI && to == consts.StyleAnthropic:
-		return raw, nil // 不支持 OpenAI 响应转 Anthropic
+		return OpenAIRespToAnthropic(raw, model)
 	case from == consts.StyleOpenAIRes && to == consts.StyleOpenAI:
 		return OpenAIResToOpenAIResp(raw, model)
 	case from == consts.StyleOpenAIRes && to == consts.StyleAnthropic:
-		return raw, nil // 不支持 OpenAI-Res 响应转 Anthropic
+		return OpenAIResToAnthropic(raw, model)
 	}
 	return nil, fmt.Errorf("unsupported response convert: %s -> %s", from, to)
 }
@@ -466,11 +510,155 @@ func ConvertStream(ctx context.Context, r io.Reader, w io.Writer, from, to, mode
 		return AnthropicSSEToOpenAIRes(r, w, model)
 	case from == consts.StyleOpenAI && to == consts.StyleOpenAIRes:
 		return OpenAISSEToOpenAIRes(r, w, model)
+	case from == consts.StyleOpenAI && to == consts.StyleAnthropic:
+		return OpenAISSEToAnthropic(r, w, model)
 	case from == consts.StyleOpenAIRes && to == consts.StyleOpenAI:
 		return OpenAIResSSEToOpenAI(r, w, model)
+	case from == consts.StyleOpenAIRes && to == consts.StyleAnthropic:
+		return OpenAIResSSEToAnthropic(r, w, model)
 	}
-	_, err := io.Copy(w, r)
-	return err
+	return fmt.Errorf("unsupported stream convert: %s -> %s", from, to)
+}
+
+// OpenAIRespToAnthropic 将 OpenAI 响应转换为 Anthropic 格式
+func OpenAIRespToAnthropic(raw []byte, model string) ([]byte, error) {
+	content := gjson.GetBytes(raw, "choices.0.message.content").String()
+	id := gjson.GetBytes(raw, "id").String()
+	return json.Marshal(map[string]any{
+		"id":    id,
+		"type":  "message",
+		"model": model,
+		"role":  "assistant",
+		"content": []map[string]any{
+			{"type": "text", "text": content},
+		},
+		"stop_reason": "end_turn",
+	})
+}
+
+// OpenAIResToAnthropic 将 OpenAI-Res 响应转换为 Anthropic 格式
+func OpenAIResToAnthropic(raw []byte, model string) ([]byte, error) {
+	content := gjson.GetBytes(raw, "output").String()
+	id := gjson.GetBytes(raw, "id").String()
+	return json.Marshal(map[string]any{
+		"id":    id,
+		"type":  "message",
+		"model": model,
+		"role":  "assistant",
+		"content": []map[string]any{
+			{"type": "text", "text": content},
+		},
+		"stop_reason": "end_turn",
+	})
+}
+
+// OpenAISSEToAnthropic 将 OpenAI SSE 流转换为 Anthropic SSE 格式
+func OpenAISSEToAnthropic(r io.Reader, w io.Writer, model string) error {
+	scanner := bufio.NewScanner(r)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	msgID := fmt.Sprintf("msg_%d", time.Now().UnixNano())
+	start := map[string]any{"type": "message_start", "message": map[string]any{"id": msgID, "model": model, "type": "message", "role": "assistant"}}
+	blockStart := map[string]any{"type": "content_block_start", "index": 0, "content_block": map[string]any{"type": "text", "text": ""}}
+	for _, evt := range []map[string]any{start, blockStart} {
+		data, _ := json.Marshal(evt)
+		fmt.Fprintf(w, "event: %s\n", evt["type"])
+		fmt.Fprintf(w, "data: %s\n\n", data)
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+	}
+	for scanner.Scan() {
+		line := strings.TrimPrefix(scanner.Text(), "data: ")
+		if line == "" || line == scanner.Text() {
+			continue
+		}
+		if line == "[DONE]" {
+			break
+		}
+		text := gjson.Get(line, "choices.0.delta.content").String()
+		if text == "" {
+			continue
+		}
+		evt := map[string]any{
+			"type":  "content_block_delta",
+			"index": 0,
+			"delta": map[string]any{"type": "text_delta", "text": text},
+		}
+		data, _ := json.Marshal(evt)
+		fmt.Fprintf(w, "event: content_block_delta\n")
+		fmt.Fprintf(w, "data: %s\n\n", data)
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+	}
+	for _, evt := range []map[string]any{{"type": "content_block_stop", "index": 0}, {"type": "message_stop", "stop_reason": "end_turn", "id": msgID}} {
+		data, _ := json.Marshal(evt)
+		fmt.Fprintf(w, "event: %s\n", evt["type"])
+		fmt.Fprintf(w, "data: %s\n\n", data)
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+	}
+	return scanner.Err()
+}
+
+// OpenAIResSSEToAnthropic 将 OpenAI-Res SSE 流转换为 Anthropic SSE 格式
+func OpenAIResSSEToAnthropic(r io.Reader, w io.Writer, model string) error {
+	scanner := bufio.NewScanner(r)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	msgID := fmt.Sprintf("msg_%d", time.Now().UnixNano())
+	start := map[string]any{"type": "message_start", "message": map[string]any{"id": msgID, "model": model, "type": "message", "role": "assistant"}}
+	blockStart := map[string]any{"type": "content_block_start", "index": 0, "content_block": map[string]any{"type": "text", "text": ""}}
+	for _, evt := range []map[string]any{start, blockStart} {
+		data, _ := json.Marshal(evt)
+		fmt.Fprintf(w, "event: %s\n", evt["type"])
+		fmt.Fprintf(w, "data: %s\n\n", data)
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+	}
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "event:") {
+			continue
+		}
+		dataLine := strings.TrimPrefix(line, "data: ")
+		if dataLine == "" || dataLine == line {
+			continue
+		}
+		if dataLine == "[DONE]" {
+			break
+		}
+		text := gjson.Get(dataLine, "output").String()
+		if text == "" {
+			continue
+		}
+		evt := map[string]any{
+			"type":  "content_block_delta",
+			"index": 0,
+			"delta": map[string]any{"type": "text_delta", "text": text},
+		}
+		payload, _ := json.Marshal(evt)
+		fmt.Fprintf(w, "event: content_block_delta\n")
+		fmt.Fprintf(w, "data: %s\n\n", payload)
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+	}
+	for _, evt := range []map[string]any{{"type": "content_block_stop", "index": 0}, {"type": "message_stop", "stop_reason": "end_turn", "id": msgID}} {
+		payload, _ := json.Marshal(evt)
+		fmt.Fprintf(w, "event: %s\n", evt["type"])
+		fmt.Fprintf(w, "data: %s\n\n", payload)
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+	}
+	return scanner.Err()
+}
+
+// CanConvert 判断是否可以在两种格式间转换（双向检查）
+func CanConvert(from, to string) bool {
+	return CanConvertRequest(from, to) && CanConvertResponse(to, from) && CanConvertStream(to, from)
 }
 
 // OpenAISSEToOpenAIRes 将 OpenAI SSE 流转换为 OpenAI-Res SSE 格式
