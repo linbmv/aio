@@ -55,8 +55,8 @@ func BalanceChat(ctx context.Context, start time.Time, clientFormat string, befo
 
 	client := providers.GetClient(time.Second * time.Duration(providersWithMeta.TimeOut) / 3)
 
-	// 请求体转换缓存
-	reqCache := map[string][]byte{clientFormat: before.raw}
+	// 请求体转换缓存 - 限制最多3种格式避免内存泄漏
+	reqCache := make(map[string][]byte, 3)
 	getReqBody := func(providerType string) ([]byte, error) {
 		if data, ok := reqCache[providerType]; ok {
 			return data, nil
@@ -65,7 +65,9 @@ func BalanceChat(ctx context.Context, start time.Time, clientFormat string, befo
 		if err != nil {
 			return nil, err
 		}
-		reqCache[providerType] = converted
+		if len(reqCache) < 3 {
+			reqCache[providerType] = converted
+		}
 		return converted, nil
 	}
 
@@ -229,10 +231,12 @@ func RecordLog(ctx context.Context, reqStart time.Time, reader io.ReadCloser, pr
 		if err != nil {
 			return err
 		}
-		if _, err := gorm.G[models.ChatLog](models.DB).Where("id = ?", logId).Updates(ctx, *log); err != nil {
-			return err
+		if log != nil {
+			if _, err := gorm.G[models.ChatLog](models.DB).Where("id = ?", logId).Updates(ctx, *log); err != nil {
+				return err
+			}
 		}
-		if ioLog {
+		if ioLog && output != nil {
 			if _, err := gorm.G[models.ChatIO](models.DB).Where("log_id = ?", logId).Updates(ctx, models.ChatIO{OutputUnion: *output}); err != nil {
 				return err
 			}
@@ -248,12 +252,9 @@ func RecordLog(ctx context.Context, reqStart time.Time, reader io.ReadCloser, pr
 }
 
 func SaveChatLog(ctx context.Context, log models.ChatLog) (uint, error) {
-	if ctx == nil {
-		ctx = context.Background()
-	} else {
-		ctx = context.WithoutCancel(ctx)
-	}
-	if err := gorm.G[models.ChatLog](models.DB).Create(ctx, &log); err != nil {
+	// 统一使用context.Background()避免兼容性问题
+	saveCtx := context.Background()
+	if err := gorm.G[models.ChatLog](models.DB).Create(saveCtx, &log); err != nil {
 		return 0, err
 	}
 	return log.ID, nil

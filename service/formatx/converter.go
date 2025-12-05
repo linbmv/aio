@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -18,7 +19,8 @@ import (
 func safeFlush(w io.Writer) {
 	if f, ok := w.(http.Flusher); ok {
 		defer func() {
-			if recover() != nil {
+			if r := recover(); r != nil {
+				slog.Warn("safeFlush panic recovered", "panic", r)
 			}
 		}()
 		f.Flush()
@@ -226,7 +228,9 @@ func AnthropicSSEToOpenAI(r io.Reader, w io.Writer, model string) error {
 		switch eventType {
 		case "message_delta":
 			if u := gjson.Get(data, "usage"); u.Exists() {
-				usage = u.Value().(map[string]any)
+				if usageMap, ok := u.Value().(map[string]any); ok {
+					usage = usageMap
+				}
 			}
 		case "content_block_delta":
 			text := gjson.Get(data, "delta.text").String()

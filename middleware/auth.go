@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"crypto/subtle"
 	"net/http"
 	"strings"
 
@@ -32,7 +33,7 @@ func Auth(token string) gin.HandlerFunc {
 			return
 		}
 
-		if extractedKey != token {
+		if subtle.ConstantTimeCompare([]byte(extractedKey), []byte(token)) != 1 {
 			common.ErrorWithHttpStatus(c, http.StatusUnauthorized, http.StatusUnauthorized, "Invalid token")
 			c.Abort()
 			return
@@ -61,7 +62,7 @@ func AuthAnthropic(koken string) gin.HandlerFunc {
 			return
 		}
 
-		if apiKey != koken {
+		if subtle.ConstantTimeCompare([]byte(apiKey), []byte(koken)) != 1 {
 			common.ErrorWithHttpStatus(c, http.StatusUnauthorized, http.StatusUnauthorized, "Invalid token")
 			c.Abort()
 			return
@@ -91,7 +92,7 @@ func AuthEither(token string) gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-		if apiKey != token {
+		if subtle.ConstantTimeCompare([]byte(apiKey), []byte(token)) != 1 {
 			common.ErrorWithHttpStatus(c, http.StatusUnauthorized, http.StatusUnauthorized, "Invalid token")
 			c.Abort()
 			return

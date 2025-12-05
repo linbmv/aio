@@ -103,6 +103,7 @@ func chatHandler(c *gin.Context, defaultFormat string) {
 		streamCtx := context.Background()
 
 		pr, pw := io.Pipe()
+		defer pw.Close()
 		reader := io.TeeReader(res.Body, pw)
 		defer res.Body.Close()
 

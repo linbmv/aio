@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/rand/v2"
 	"slices"
+	"sync"
 
 	"github.com/samber/lo"
 )
@@ -16,25 +17,30 @@ type Balancer interface {
 }
 
 // 按权重概率抽取，类似抽签。
-type Lottery map[uint]int
-
-func NewLottery(items map[uint]int) Balancer {
-	return Lottery(items)
+type Lottery struct {
+	mu    sync.RWMutex
+	items map[uint]int
 }
 
-func (w Lottery) Pop() (uint, error) {
-	if len(w) == 0 {
+func NewLottery(items map[uint]int) Balancer {
+	return &Lottery{items: items}
+}
+
+func (w *Lottery) Pop() (uint, error) {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	if len(w.items) == 0 {
 		return 0, fmt.Errorf("no provide items")
 	}
 	total := 0
-	for _, v := range w {
+	for _, v := range w.items {
 		total += v
 	}
 	if total <= 0 {
 		return 0, fmt.Errorf("total provide weight must be greater than 0")
 	}
 	r := rand.IntN(total)
-	for k, v := range w {
+	for k, v := range w.items {
 		if r < v {
 			return k, nil
 		}
@@ -43,30 +49,35 @@ func (w Lottery) Pop() (uint, error) {
 	return 0, fmt.Errorf("unexpected error")
 }
 
-func (w Lottery) Delete(key uint) {
-	delete(w, key)
+func (w *Lottery) Delete(key uint) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	delete(w.items, key)
 }
 
-func (w Lottery) Reduce(key uint) {
-	if weight, ok := w[key]; ok {
+func (w *Lottery) Reduce(key uint) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if weight, ok := w.items[key]; ok {
 		dec := weight / 3
 		if dec < 1 {
 			dec = 1
 		}
-		w[key] = weight - dec
-		if w[key] <= 0 {
-			delete(w, key)
+		w.items[key] = weight - dec
+		if w.items[key] <= 0 {
+			delete(w.items, key)
 		}
 	}
 }
 
 // 按顺序循环轮转，按权重展开实现真正的加权轮询
 type Rotor struct {
+	mu      sync.Mutex
 	*list.List
 	weights map[uint]int
 }
 
-func NewRotor(items map[uint]int) Rotor {
+func NewRotor(items map[uint]int) *Rotor {
 	l := list.New()
 	weights := make(map[uint]int)
 	entries := lo.Entries(items)
@@ -80,10 +91,12 @@ func NewRotor(items map[uint]int) Rotor {
 			l.PushBack(entry.Key)
 		}
 	}
-	return Rotor{List: l, weights: weights}
+	return &Rotor{List: l, weights: weights}
 }
 
-func (w Rotor) Pop() (uint, error) {
+func (w *Rotor) Pop() (uint, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	if w.Len() == 0 {
 		return 0, fmt.Errorf("no provide items")
 	}
@@ -93,7 +106,9 @@ func (w Rotor) Pop() (uint, error) {
 	return e.Value.(uint), nil
 }
 
-func (w Rotor) Delete(key uint) {
+func (w *Rotor) Delete(key uint) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	delete(w.weights, key)
 	// 移除队列中所有该key的实例
 	for e := w.Front(); e != nil; {
@@ -105,7 +120,9 @@ func (w Rotor) Delete(key uint) {
 	}
 }
 
-func (w Rotor) Reduce(key uint) {
+func (w *Rotor) Reduce(key uint) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	weight, ok := w.weights[key]
 	if !ok || weight <= 1 {
 		w.Delete(key)
