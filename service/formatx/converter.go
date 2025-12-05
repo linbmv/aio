@@ -152,6 +152,7 @@ func AnthropicSSEToOpenAI(r io.Reader, w io.Writer, model string) error {
 	var eventType string
 	chunkID := fmt.Sprintf("chatcmpl-%d", time.Now().Unix())
 	created := time.Now().Unix()
+	firstChunk := true
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -175,6 +176,25 @@ func AnthropicSSEToOpenAI(r io.Reader, w io.Writer, model string) error {
 					return fmt.Errorf("anthropic stream decode error: %w", err)
 				}
 				if delta.Delta.Text != "" {
+					if firstChunk {
+						roleChunk := map[string]interface{}{
+							"id":      chunkID,
+							"object":  "chat.completion.chunk",
+							"created": created,
+							"model":   model,
+							"choices": []map[string]interface{}{
+								{
+									"index":         0,
+									"delta":         map[string]string{"role": "assistant"},
+									"finish_reason": nil,
+								},
+							},
+						}
+						roleBytes, _ := json.Marshal(roleChunk)
+						fmt.Fprintf(w, "data: %s\n\n", roleBytes)
+						firstChunk = false
+					}
+
 					chunk := map[string]interface{}{
 						"id":      chunkID,
 						"object":  "chat.completion.chunk",
@@ -182,11 +202,8 @@ func AnthropicSSEToOpenAI(r io.Reader, w io.Writer, model string) error {
 						"model":   model,
 						"choices": []map[string]interface{}{
 							{
-								"index": 0,
-								"delta": map[string]interface{}{
-									"role":    "assistant",
-									"content": delta.Delta.Text,
-								},
+								"index":         0,
+								"delta":         map[string]string{"content": delta.Delta.Text},
 								"finish_reason": nil,
 							},
 						},
