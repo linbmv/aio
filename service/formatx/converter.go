@@ -658,12 +658,41 @@ func AnthropicToOpenAIRes(raw []byte, model string) ([]byte, error) {
 
 // OpenAIToOpenAIRes Response 将 OpenAI 响应转换为 OpenAI-Res 格式
 func OpenAIRespToOpenAIRes(raw []byte, model string) ([]byte, error) {
+	// 先尝试标准 OpenAI 格式
 	content := gjson.GetBytes(raw, "choices.0.message.content").String()
+
+	// 如果没有 content，可能是 OpenAI Responses API 格式
+	if content == "" {
+		// 尝试从 output 数组中提取文本
+		var textParts []string
+		gjson.GetBytes(raw, "output").ForEach(func(_, item gjson.Result) bool {
+			if item.Get("type").String() == "output_text" {
+				if text := item.Get("text").String(); text != "" {
+					textParts = append(textParts, text)
+				}
+			}
+			return true
+		})
+
+		if len(textParts) > 0 {
+			content = strings.Join(textParts, "")
+		} else {
+			// 最后尝试直接从 output 字段获取
+			content = gjson.GetBytes(raw, "output").String()
+		}
+	}
+
+	id := gjson.GetBytes(raw, "id").String()
+	created := gjson.GetBytes(raw, "created").Int()
+	if created == 0 {
+		created = time.Now().Unix()
+	}
+
 	return json.Marshal(map[string]interface{}{
-		"id":      gjson.GetBytes(raw, "id").String(),
+		"id":      id,
 		"model":   model,
 		"output":  content,
-		"created": gjson.GetBytes(raw, "created").Int(),
+		"created": created,
 	})
 }
 
