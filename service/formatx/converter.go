@@ -590,10 +590,13 @@ func CanConvertStream(from, to string) bool {
 
 // ConvertRequest 转换请求格式
 func ConvertRequest(raw []byte, from, to string) ([]byte, error) {
-	if from == to {
+	provider := normalizeProviderStyle(to)
+
+	// OpenAI-Res 请求可能需要格式规范化
+	if from == consts.StyleOpenAIRes && to == consts.StyleOpenAIRes {
 		return raw, nil
 	}
-	provider := normalizeProviderStyle(to)
+
 	if from == provider {
 		return raw, nil
 	}
@@ -624,10 +627,13 @@ func ConvertRequest(raw []byte, from, to string) ([]byte, error) {
 
 // ConvertResponse 转换响应格式（非流）
 func ConvertResponse(raw []byte, from, to, model string) ([]byte, error) {
-	if from == to {
-		return raw, nil
-	}
 	provider := normalizeProviderStyle(from)
+
+	// OpenAI-Res 需要强制转换，即使 from == to
+	if from == consts.StyleOpenAIRes && to == consts.StyleOpenAIRes {
+		return OpenAIResponsesAPIToOpenAIRes(raw, model)
+	}
+
 	if provider == to {
 		return raw, nil
 	}
@@ -669,32 +675,6 @@ func ConvertStream(ctx context.Context, r io.Reader, w io.Writer, from, to, mode
 		slog.Debug("ConvertStream start", "from", from, "to", to, "model", model)
 	}
 
-	// from == to 直接透传
-	if from == to {
-		buf := make([]byte, 4096)
-		var totalBytes int64
-		for {
-			n, readErr := r.Read(buf)
-			if n > 0 {
-				written, writeErr := w.Write(buf[:n])
-				totalBytes += int64(written)
-				if writeErr != nil {
-					return fmt.Errorf("stream write failed after %d bytes: %w", totalBytes, writeErr)
-				}
-				safeFlush(w)
-			}
-			if readErr != nil {
-				if readErr == io.EOF {
-					if debug {
-						slog.Debug("ConvertStream direct copy completed", "bytes", totalBytes)
-					}
-					return nil
-				}
-				return fmt.Errorf("stream copy failed after %d bytes: %w", totalBytes, readErr)
-			}
-		}
-	}
-
 	provider := normalizeProviderStyle(from)
 
 	streamReader := r
@@ -705,6 +685,11 @@ func ConvertStream(ctx context.Context, r io.Reader, w io.Writer, from, to, mode
 			return ctx.Err()
 		default:
 		}
+	}
+
+	// OpenAI-Res 需要强制转换，即使 from == to
+	if from == consts.StyleOpenAIRes && to == consts.StyleOpenAIRes {
+		return OpenAIResponsesAPISSEToOpenAIRes(streamReader, w, model, debug)
 	}
 
 	if provider == to {
