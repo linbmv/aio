@@ -774,11 +774,10 @@ func (r contextReader) Read(p []byte) (int, error) {
 
 // ConvertStream 转换流式响应
 func ConvertStream(ctx context.Context, r io.Reader, w io.Writer, from, to, model string, debug bool) error {
-	if debug {
-		slog.Debug("ConvertStream start", "from", from, "to", to, "model", model)
-	}
+	slog.Info("ConvertStream", "from", from, "to", to, "model", model)
 
 	provider := normalizeProviderStyle(from)
+	slog.Info("ConvertStream normalized", "provider", provider, "to", to)
 
 	streamReader := r
 	if ctx != nil {
@@ -792,16 +791,18 @@ func ConvertStream(ctx context.Context, r io.Reader, w io.Writer, from, to, mode
 
 	// OpenAI-Res 需要强制转换，即使 from == to
 	if from == consts.StyleOpenAIRes && to == consts.StyleOpenAIRes {
+		slog.Info("ConvertStream: using OpenAIResponsesAPISSEToOpenAIRes (same format)")
 		return OpenAIResponsesAPISSEToOpenAIRes(streamReader, w, model, debug)
 	}
 
-	// 自动检测：如果 Provider 声称是 openai 但实际返回 openai-res SSE 格式
+	// 自动检测：如果 Provider 声称是 openai 但客户端要openai-res
 	if provider == consts.StyleOpenAI && to == consts.StyleOpenAIRes {
-		// 尝试检测是否是 openai-res SSE 格式（包含 event: response.* 行）
+		slog.Info("ConvertStream: using OpenAIResponsesAPISSEToOpenAIRes (openai->openai-res)")
 		return OpenAIResponsesAPISSEToOpenAIRes(streamReader, w, model, debug)
 	}
 
 	if provider == to {
+		slog.Info("ConvertStream: direct passthrough", "provider", provider)
 		// Use buffered copy with immediate flush for each chunk
 		buf := make([]byte, 4096)
 		var totalBytes int64

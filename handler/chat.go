@@ -120,10 +120,7 @@ func chatHandler(c *gin.Context, defaultFormat string) {
 
 		go service.RecordLog(context.Background(), startReq, pr, logProcessor, logId, *before, providersWithMeta.IOLog)
 
-		slog.Info("starting stream conversion")
-		if debugMode {
-			slog.Debug("convert stream", "providerType", providerType, "requestFormat", requestFormat, "model", before.Model)
-		}
+		slog.Info("starting stream conversion", "providerType", providerType, "requestFormat", requestFormat)
 
 		if err := formatx.ConvertStream(streamCtx, reader, c.Writer, providerType, requestFormat, before.Model, debugMode); err != nil {
 			pw.CloseWithError(err)

@@ -1,0 +1,138 @@
+--- a/service/formatx/converter.go
++++ b/service/formatx/converter.go
+@@ -15,6 +15,14 @@ import (
+ 	"github.com/tidwall/gjson"
+ )
+
++// normalizeProviderStyle 将 openai-res Provider 视为 openai，避免把客户端格式误当 Provider 类型
++func normalizeProviderStyle(style string) string {
++	if style == consts.StyleOpenAIRes {
++		return consts.StyleOpenAI
++	}
++	return style
++}
++
+ // safeFlush 在刷新过程中捕获 panic，避免 SSE 连接异常导致进程崩溃
+ func safeFlush(w io.Writer) {
+ 	if f, ok := w.(http.Flusher); ok {
+@@ -599,11 +607,12 @@ func CanConvertStream(from, to string) bool {
+
+ // ConvertRequest 转换请求格式
+ func ConvertRequest(raw []byte, from, to string) ([]byte, error) {
+-	if from == to {
++	provider := normalizeProviderStyle(to)
++	if from == provider {
+ 		return raw, nil
+ 	}
+ 	switch {
+-	case from == consts.StyleOpenAI && to == consts.StyleAnthropic:
++	case from == consts.StyleOpenAI && provider == consts.StyleAnthropic:
+ 		return OpenAIToAnthropic(raw)
+ 	case from == consts.StyleOpenAI && to == consts.StyleOpenAIRes:
+ 		return OpenAIToOpenAIRes(raw)
+@@ -617,13 +626,13 @@ func ConvertRequest(raw []byte, from, to string) ([]byte, error) {
+ 		}
+ 		return OpenAIToAnthropic(converted)
+-	case from == consts.StyleAnthropic && to == consts.StyleOpenAI:
++	case from == consts.StyleAnthropic && provider == consts.StyleOpenAI:
+ 		return AnthropicToOpenAIReq(raw)
+ 	case from == consts.StyleAnthropic && to == consts.StyleOpenAIRes:
+ 		converted, err := AnthropicToOpenAIReq(raw)
+ 		if err != nil {
+ 			return nil, err
+ 		}
+ 		return OpenAIToOpenAIRes(converted)
+ 	}
+-	return nil, fmt.Errorf("unsupported request convert: %s -> %s", from, to)
++	return nil, fmt.Errorf("unsupported request convert: %s -> %s (provider normalized to %s)", from, to, provider)
+ }
+
+ // ConvertResponse 转换响应格式（非流）
+ func ConvertResponse(raw []byte, from, to, model string) ([]byte, error) {
+-	if from == to {
+-		// openai-res 调用真实 Responses API 时需要将原始响应转为简化格式
+-		if from == consts.StyleOpenAIRes {
+-			return OpenAIResponsesAPIToOpenAIRes(raw, model)
+-		}
++	provider := normalizeProviderStyle(from)
++	if provider == to {
+ 		return raw, nil
+ 	}
+ 	switch {
+-	case from == consts.StyleAnthropic && to == consts.StyleOpenAI:
++	case provider == consts.StyleAnthropic && to == consts.StyleOpenAI:
+ 		return AnthropicToOpenAI(raw, model)
+-	case from == consts.StyleAnthropic && to == consts.StyleOpenAIRes:
++	case provider == consts.StyleAnthropic && to == consts.StyleOpenAIRes:
+ 		return AnthropicToOpenAIRes(raw, model)
+-	case from == consts.StyleOpenAI && to == consts.StyleOpenAIRes:
++	case provider == consts.StyleOpenAI && to == consts.StyleOpenAIRes:
+ 		return OpenAIRespToOpenAIRes(raw, model)
+-	case from == consts.StyleOpenAI && to == consts.StyleAnthropic:
++	case provider == consts.StyleOpenAI && to == consts.StyleAnthropic:
+ 		return OpenAIRespToAnthropic(raw, model)
+-	case from == consts.StyleOpenAIRes && to == consts.StyleOpenAI:
+-		return OpenAIResToOpenAIResp(raw, model)
+-	case from == consts.StyleOpenAIRes && to == consts.StyleAnthropic:
+-		return OpenAIResToAnthropic(raw, model)
+ 	}
+-	return nil, fmt.Errorf("unsupported response convert: %s -> %s", from, to)
++	return nil, fmt.Errorf("unsupported response convert: %s -> %s (provider normalized to %s)", from, to, provider)
+ }
+
+ type contextReader struct {
+@@ -665,18 +670,11 @@ func (r contextReader) Read(p []byte) (int, error) {
+ // ConvertStream 转换流式响应
+ func ConvertStream(ctx context.Context, r io.Reader, w io.Writer, from, to, model string, debug bool) error {
+ 	if debug {
+ 		slog.Debug("ConvertStream start", "from", from, "to", to, "model", model)
+ 	}
+
++	provider := normalizeProviderStyle(from)
++
+ 	streamReader := r
+ 	if ctx != nil {
+ 		streamReader = contextReader{ctx: ctx, reader: r}
+@@ -687,14 +685,7 @@ func ConvertStream(ctx context.Context, r io.Reader, w io.Writer, from, to, mod
+ 		}
+ 	}
+
+-	if from == to {
+-		// openai-res 调用真实 Responses API 时需要将原始事件转为简化 SSE，而非直接透传
+-		if from == consts.StyleOpenAIRes {
+-			err := OpenAIResponsesAPISSEToOpenAIRes(streamReader, w, model, debug)
+-			if err != nil && debug {
+-				slog.Debug("ConvertStream openai-res convert failed", "error", err)
+-			}
+-			return err
+-		}
++	if provider == to {
+ 		// Use buffered copy with immediate flush for each chunk
+ 		buf := make([]byte, 4096)
+ 		var totalBytes int64
+@@ -718,19 +709,17 @@ func ConvertStream(ctx context.Context, r io.Reader, w io.Writer, from, to, mod
+
+ 	var err error
+ 	switch {
+-	case from == consts.StyleAnthropic && to == consts.StyleOpenAI:
++	case provider == consts.StyleAnthropic && to == consts.StyleOpenAI:
+ 		err = AnthropicSSEToOpenAI(streamReader, w, model)
+-	case from == consts.StyleAnthropic && to == consts.StyleOpenAIRes:
++	case provider == consts.StyleAnthropic && to == consts.StyleOpenAIRes:
+ 		err = AnthropicSSEToOpenAIRes(streamReader, w, model, debug)
+-	case from == consts.StyleOpenAI && to == consts.StyleOpenAIRes:
++	case provider == consts.StyleOpenAI && to == consts.StyleOpenAIRes:
+ 		err = OpenAISSEToOpenAIRes(streamReader, w, model)
+-	case from == consts.StyleOpenAI && to == consts.StyleAnthropic:
++	case provider == consts.StyleOpenAI && to == consts.StyleAnthropic:
+ 		err = OpenAISSEToAnthropic(streamReader, w, model)
+-	case from == consts.StyleOpenAIRes && to == consts.StyleOpenAI:
+-		err = OpenAIResSSEToOpenAI(streamReader, w, model)
+-	case from == consts.StyleOpenAIRes && to == consts.StyleAnthropic:
+-		err = OpenAIResSSEToAnthropic(streamReader, w, model)
+ 	default:
+-		err = fmt.Errorf("unsupported stream convert: %s -> %s", from, to)
++		err = fmt.Errorf("unsupported stream convert: %s -> %s (provider normalized to %s)", from, to, provider)
+ 	}
+
+ 	if err != nil && debug {
