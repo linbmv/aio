@@ -373,27 +373,49 @@ func OpenAIResponsesAPISSEToOpenAIRes(r io.Reader, w io.Writer, model string, de
 	for scanner.Scan() {
 		line := scanner.Text()
 
-		// 调试：记录所有接收到的行
-		if debug && line != "" {
-			slog.Debug("OpenAIResponsesAPISSEToOpenAIRes received line", "line", line)
+		// 调试：记录所有接收到的行(包括空行)
+		if debug {
+			if line == "" {
+				slog.Debug("OpenAIResponsesAPISSEToOpenAIRes received empty line")
+			} else {
+				slog.Debug("OpenAIResponsesAPISSEToOpenAIRes received line", "line", line, "length", len(line))
+			}
 		}
 
-		// 跳过注释行和空行
-		if strings.HasPrefix(line, ":") || line == "" {
+		// 跳过注释行但不跳过空行(空行是SSE格式的一部分)
+		if strings.HasPrefix(line, ":") {
+			continue
+		}
+
+		// 空行表示事件结束,重置eventType
+		if line == "" {
+			eventType = ""
 			continue
 		}
 
 		if strings.HasPrefix(line, "event:") {
 			eventType = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
+			if debug {
+				slog.Debug("OpenAIResponsesAPISSEToOpenAIRes event type", "eventType", eventType)
+			}
 			continue
 		}
 		if !strings.HasPrefix(line, "data:") {
+			if debug {
+				slog.Debug("OpenAIResponsesAPISSEToOpenAIRes skipping non-data line", "line", line)
+			}
 			continue
 		}
 
 		data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
 		if data == "" {
+			if debug {
+				slog.Debug("OpenAIResponsesAPISSEToOpenAIRes empty data field")
+			}
 			continue
+		}
+		if debug {
+			slog.Debug("OpenAIResponsesAPISSEToOpenAIRes processing data", "data", data, "eventType", eventType)
 		}
 
 		// 处理带 event 的格式
@@ -401,14 +423,23 @@ func OpenAIResponsesAPISSEToOpenAIRes(r io.Reader, w io.Writer, model string, de
 			switch eventType {
 			case "response.output_text.delta":
 				text := gjson.Get(data, "delta").String()
+				if debug {
+					slog.Debug("OpenAIResponsesAPISSEToOpenAIRes delta event", "text", text, "hasText", text != "")
+				}
 				if text != "" {
 					payload, _ := json.Marshal(map[string]any{"model": model, "output": text})
 					n, _ := fmt.Fprintf(w, "data: %s\n\n", payload)
 					totalBytes += n
 					chunkCount++
 					safeFlush(w)
+					if debug {
+						slog.Debug("OpenAIResponsesAPISSEToOpenAIRes sent chunk", "chunkCount", chunkCount, "bytes", n)
+					}
 				}
 			case "response.output_text.done", "response.done", "response.completed":
+				if debug {
+					slog.Debug("OpenAIResponsesAPISSEToOpenAIRes done event", "eventType", eventType)
+				}
 				fmt.Fprint(w, "data: [DONE]\n\n")
 				safeFlush(w)
 				if debug {
@@ -420,7 +451,14 @@ func OpenAIResponsesAPISSEToOpenAIRes(r io.Reader, w io.Writer, model string, de
 				if errMsg == "" {
 					errMsg = data
 				}
+				if debug {
+					slog.Debug("OpenAIResponsesAPISSEToOpenAIRes error event", "error", errMsg)
+				}
 				return fmt.Errorf("openai responses stream error: %s", errMsg)
+			default:
+				if debug {
+					slog.Debug("OpenAIResponsesAPISSEToOpenAIRes unknown event type", "eventType", eventType, "data", data)
+				}
 			}
 			eventType = ""
 			continue
@@ -429,10 +467,16 @@ func OpenAIResponsesAPISSEToOpenAIRes(r io.Reader, w io.Writer, model string, de
 		// 处理无 event 的简化格式（直接是 data: {...}）
 		if gjson.Get(data, "output").Exists() {
 			// 已经是简化格式，直接透传
+			if debug {
+				slog.Debug("OpenAIResponsesAPISSEToOpenAIRes output field exists, passthrough", "data", data)
+			}
 			fmt.Fprintf(w, "data: %s\n\n", data)
 			chunkCount++
 			safeFlush(w)
 		} else if data == "[DONE]" {
+			if debug {
+				slog.Debug("OpenAIResponsesAPISSEToOpenAIRes [DONE] received")
+			}
 			fmt.Fprint(w, "data: [DONE]\n\n")
 			safeFlush(w)
 			if debug {
@@ -442,11 +486,18 @@ func OpenAIResponsesAPISSEToOpenAIRes(r io.Reader, w io.Writer, model string, de
 		} else if gjson.Get(data, "choices").Exists() {
 			// 处理标准 OpenAI SSE 格式：data: {"choices":[{"delta":{"content":"..."}}]}
 			content := gjson.Get(data, "choices.0.delta.content").String()
+			if debug {
+				slog.Debug("OpenAIResponsesAPISSEToOpenAIRes choices format", "content", content, "hasContent", content != "")
+			}
 			if content != "" {
 				payload, _ := json.Marshal(map[string]any{"model": model, "output": content})
 				fmt.Fprintf(w, "data: %s\n\n", payload)
 				chunkCount++
 				safeFlush(w)
+			}
+		} else {
+			if debug {
+				slog.Debug("OpenAIResponsesAPISSEToOpenAIRes unrecognized data format", "data", data)
 			}
 		}
 	}
