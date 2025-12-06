@@ -595,7 +595,12 @@ func OpenAIToOpenAIRes(raw []byte) ([]byte, error) {
 	if len(lastMsg) > 0 {
 		input = lastMsg[len(lastMsg)-1].String()
 	}
-	return json.Marshal(map[string]string{"model": model, "input": input})
+	stream := gjson.GetBytes(raw, "stream").Bool()
+	payload := map[string]any{"model": model, "input": input}
+	if stream {
+		payload["stream"] = true
+	}
+	return json.Marshal(payload)
 }
 
 // AnthropicToOpenAIRes 将 Anthropic 响应转换为 OpenAI-Res 格式
@@ -807,12 +812,6 @@ func ConvertStream(ctx context.Context, r io.Reader, w io.Writer, from, to, mode
 		return OpenAIResponsesAPISSEToOpenAIRes(streamReader, w, model, debug)
 	}
 
-	// 自动检测：如果 Provider 声称是 openai 但客户端要openai-res
-	if provider == consts.StyleOpenAI && to == consts.StyleOpenAIRes {
-		slog.Info("ConvertStream: using OpenAIResponsesAPISSEToOpenAIRes (openai->openai-res)")
-		return OpenAIResponsesAPISSEToOpenAIRes(streamReader, w, model, debug)
-	}
-
 	if provider == to {
 		slog.Info("ConvertStream: direct passthrough", "provider", provider)
 		// Use buffered copy with immediate flush for each chunk
@@ -843,20 +842,21 @@ func ConvertStream(ctx context.Context, r io.Reader, w io.Writer, from, to, mode
 
 	var err error
 	switch {
+	case from == consts.StyleOpenAIRes && to == consts.StyleOpenAI:
+		err = OpenAIResSSEToOpenAI(streamReader, w, model)
+	case from == consts.StyleOpenAIRes && to == consts.StyleAnthropic:
+		err = OpenAIResSSEToAnthropic(streamReader, w, model)
 	case provider == consts.StyleAnthropic && to == consts.StyleOpenAI:
 		err = AnthropicSSEToOpenAI(streamReader, w, model)
 	case provider == consts.StyleAnthropic && to == consts.StyleOpenAIRes:
 		err = AnthropicSSEToOpenAIRes(streamReader, w, model, debug)
 	case provider == consts.StyleOpenAI && to == consts.StyleOpenAIRes:
+		slog.Info("ConvertStream: using OpenAISSEToOpenAIRes")
 		err = OpenAISSEToOpenAIRes(streamReader, w, model)
 	case provider == consts.StyleOpenAI && to == consts.StyleAnthropic:
 		err = OpenAISSEToAnthropic(streamReader, w, model)
-	case from == consts.StyleOpenAIRes && to == consts.StyleOpenAI:
-		err = OpenAIResSSEToOpenAI(streamReader, w, model)
-	case from == consts.StyleOpenAIRes && to == consts.StyleAnthropic:
-		err = OpenAIResSSEToAnthropic(streamReader, w, model)
 	default:
-		err = fmt.Errorf("unsupported stream convert: %s -> %s", from, to)
+		err = fmt.Errorf("unsupported stream convert: %s -> %s (provider=%s)", from, to, provider)
 	}
 
 	if err != nil && debug {
