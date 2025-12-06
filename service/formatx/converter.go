@@ -312,6 +312,9 @@ func AnthropicSSEToOpenAIRes(r io.Reader, w io.Writer, model string, debug bool)
 			switch eventType {
 			case "content_block_delta":
 				text := gjson.Get(data, "delta.text").String()
+				if text == "" {
+					text = gjson.Get(data, "delta.reasoning_content").String()
+				}
 				if text != "" {
 					chunk := map[string]interface{}{
 						"model":  model,
