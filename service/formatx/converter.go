@@ -376,9 +376,9 @@ func OpenAIResponsesAPISSEToOpenAIRes(r io.Reader, w io.Writer, model string, de
 		// 调试：记录所有接收到的行(包括空行)
 		if debug {
 			if line == "" {
-				slog.Debug("OpenAIResponsesAPISSEToOpenAIRes received empty line")
+				slog.Info("SSE: received empty line")
 			} else {
-				slog.Debug("OpenAIResponsesAPISSEToOpenAIRes received line", "line", line, "length", len(line))
+				slog.Info("SSE: received line", "line", line, "length", len(line))
 			}
 		}
 
@@ -396,13 +396,13 @@ func OpenAIResponsesAPISSEToOpenAIRes(r io.Reader, w io.Writer, model string, de
 		if strings.HasPrefix(line, "event:") {
 			eventType = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
 			if debug {
-				slog.Debug("OpenAIResponsesAPISSEToOpenAIRes event type", "eventType", eventType)
+				slog.Info("SSE: event type", "eventType", eventType)
 			}
 			continue
 		}
 		if !strings.HasPrefix(line, "data:") {
 			if debug {
-				slog.Debug("OpenAIResponsesAPISSEToOpenAIRes skipping non-data line", "line", line)
+				slog.Info("SSE: skipping non-data line", "line", line)
 			}
 			continue
 		}
@@ -410,12 +410,12 @@ func OpenAIResponsesAPISSEToOpenAIRes(r io.Reader, w io.Writer, model string, de
 		data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
 		if data == "" {
 			if debug {
-				slog.Debug("OpenAIResponsesAPISSEToOpenAIRes empty data field")
+				slog.Info("SSE: empty data field")
 			}
 			continue
 		}
 		if debug {
-			slog.Debug("OpenAIResponsesAPISSEToOpenAIRes processing data", "data", data, "eventType", eventType)
+			slog.Info("SSE: processing data", "data", data, "eventType", eventType)
 		}
 
 		// 处理带 event 的格式
@@ -424,7 +424,7 @@ func OpenAIResponsesAPISSEToOpenAIRes(r io.Reader, w io.Writer, model string, de
 			case "response.output_text.delta":
 				text := gjson.Get(data, "delta").String()
 				if debug {
-					slog.Debug("OpenAIResponsesAPISSEToOpenAIRes delta event", "text", text, "hasText", text != "")
+					slog.Info("SSE: delta event", "text", text, "hasText", text != "")
 				}
 				if text != "" {
 					payload, _ := json.Marshal(map[string]any{"model": model, "output": text})
@@ -433,7 +433,7 @@ func OpenAIResponsesAPISSEToOpenAIRes(r io.Reader, w io.Writer, model string, de
 					chunkCount++
 					safeFlush(w)
 					if debug {
-						slog.Debug("OpenAIResponsesAPISSEToOpenAIRes sent chunk", "chunkCount", chunkCount, "bytes", n)
+						slog.Info("SSE: sent chunk", "chunkCount", chunkCount, "bytes", n)
 					}
 				}
 			case "response.output_text.done", "response.done", "response.completed":
@@ -466,28 +466,23 @@ func OpenAIResponsesAPISSEToOpenAIRes(r io.Reader, w io.Writer, model string, de
 
 		// 处理无 event 的简化格式（直接是 data: {...}）
 		if gjson.Get(data, "output").Exists() {
-			// 已经是简化格式，直接透传
 			if debug {
-				slog.Debug("OpenAIResponsesAPISSEToOpenAIRes output field exists, passthrough", "data", data)
+				slog.Info("SSE: output field exists, passthrough", "data", data)
 			}
 			fmt.Fprintf(w, "data: %s\n\n", data)
 			chunkCount++
 			safeFlush(w)
 		} else if data == "[DONE]" {
 			if debug {
-				slog.Debug("OpenAIResponsesAPISSEToOpenAIRes [DONE] received")
+				slog.Info("SSE: [DONE] received")
 			}
 			fmt.Fprint(w, "data: [DONE]\n\n")
 			safeFlush(w)
-			if debug {
-				slog.Debug("OpenAIResponsesAPISSEToOpenAIRes completed", "chunks", chunkCount)
-			}
 			return nil
 		} else if gjson.Get(data, "choices").Exists() {
-			// 处理标准 OpenAI SSE 格式：data: {"choices":[{"delta":{"content":"..."}}]}
 			content := gjson.Get(data, "choices.0.delta.content").String()
 			if debug {
-				slog.Debug("OpenAIResponsesAPISSEToOpenAIRes choices format", "content", content, "hasContent", content != "")
+				slog.Info("SSE: choices format", "content", content, "hasContent", content != "")
 			}
 			if content != "" {
 				payload, _ := json.Marshal(map[string]any{"model": model, "output": content})
@@ -497,7 +492,7 @@ func OpenAIResponsesAPISSEToOpenAIRes(r io.Reader, w io.Writer, model string, de
 			}
 		} else {
 			if debug {
-				slog.Debug("OpenAIResponsesAPISSEToOpenAIRes unrecognized data format", "data", data)
+				slog.Info("SSE: unrecognized data format", "data", data)
 			}
 		}
 	}
