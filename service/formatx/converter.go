@@ -280,10 +280,11 @@ func AnthropicSSEToOpenAI(r io.Reader, w io.Writer, model string) error {
 }
 
 // AnthropicSSEToOpenAIRes 将 Anthropic SSE 流转换为 OpenAI-Res SSE 格式
-func AnthropicSSEToOpenAIRes(r io.Reader, w io.Writer, model string) error {
+func AnthropicSSEToOpenAIRes(r io.Reader, w io.Writer, model string, debug bool) error {
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	var eventType string
+	var chunkCount, totalBytes int
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -305,7 +306,9 @@ func AnthropicSSEToOpenAIRes(r io.Reader, w io.Writer, model string) error {
 						"output": text,
 					}
 					chunkBytes, _ := json.Marshal(chunk)
-					fmt.Fprintf(w, "data: %s\n\n", chunkBytes)
+					n, _ := fmt.Fprintf(w, "data: %s\n\n", chunkBytes)
+					totalBytes += n
+					chunkCount++
 					if flusher, ok := w.(http.Flusher); ok {
 						flusher.Flush()
 					}
@@ -314,10 +317,17 @@ func AnthropicSSEToOpenAIRes(r io.Reader, w io.Writer, model string) error {
 			case "message_stop":
 				fmt.Fprintf(w, "data: [DONE]\n\n")
 				safeFlush(w)
+				if debug {
+					slog.Debug("AnthropicSSEToOpenAIRes completed", "chunks", chunkCount, "bytes", totalBytes)
+				}
 				return nil
 
 			case "error":
-				return fmt.Errorf("anthropic stream error: %s", data)
+				errMsg := gjson.Get(data, "error.message").String()
+				if errMsg == "" {
+					errMsg = "unknown error"
+				}
+				return fmt.Errorf("anthropic stream error: %s", errMsg)
 			}
 		}
 	}
@@ -528,7 +538,11 @@ func (r contextReader) Read(p []byte) (int, error) {
 }
 
 // ConvertStream 转换流式响应
-func ConvertStream(ctx context.Context, r io.Reader, w io.Writer, from, to, model string) error {
+func ConvertStream(ctx context.Context, r io.Reader, w io.Writer, from, to, model string, debug bool) error {
+	if debug {
+		slog.Debug("ConvertStream start", "from", from, "to", to, "model", model)
+	}
+
 	streamReader := r
 	if ctx != nil {
 		streamReader = contextReader{ctx: ctx, reader: r}
@@ -544,23 +558,37 @@ func ConvertStream(ctx context.Context, r io.Reader, w io.Writer, from, to, mode
 		if err != nil {
 			return fmt.Errorf("stream copy failed after %d bytes: %w", n, err)
 		}
+		if flusher, ok := w.(http.Flusher); ok {
+			flusher.Flush()
+		}
+		if debug {
+			slog.Debug("ConvertStream direct copy completed", "bytes", n)
+		}
 		return nil
 	}
+
+	var err error
 	switch {
 	case from == consts.StyleAnthropic && to == consts.StyleOpenAI:
-		return AnthropicSSEToOpenAI(streamReader, w, model)
+		err = AnthropicSSEToOpenAI(streamReader, w, model)
 	case from == consts.StyleAnthropic && to == consts.StyleOpenAIRes:
-		return AnthropicSSEToOpenAIRes(streamReader, w, model)
+		err = AnthropicSSEToOpenAIRes(streamReader, w, model, debug)
 	case from == consts.StyleOpenAI && to == consts.StyleOpenAIRes:
-		return OpenAISSEToOpenAIRes(streamReader, w, model)
+		err = OpenAISSEToOpenAIRes(streamReader, w, model)
 	case from == consts.StyleOpenAI && to == consts.StyleAnthropic:
-		return OpenAISSEToAnthropic(streamReader, w, model)
+		err = OpenAISSEToAnthropic(streamReader, w, model)
 	case from == consts.StyleOpenAIRes && to == consts.StyleOpenAI:
-		return OpenAIResSSEToOpenAI(streamReader, w, model)
+		err = OpenAIResSSEToOpenAI(streamReader, w, model)
 	case from == consts.StyleOpenAIRes && to == consts.StyleAnthropic:
-		return OpenAIResSSEToAnthropic(streamReader, w, model)
+		err = OpenAIResSSEToAnthropic(streamReader, w, model)
+	default:
+		err = fmt.Errorf("unsupported stream convert: %s -> %s", from, to)
 	}
-	return fmt.Errorf("unsupported stream convert: %s -> %s", from, to)
+
+	if err != nil && debug {
+		slog.Debug("ConvertStream completed with error", "error", err)
+	}
+	return err
 }
 
 // OpenAIRespToAnthropic 将 OpenAI 响应转换为 Anthropic 格式

@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -18,6 +19,8 @@ import (
 	"github.com/atopos31/llmio/service/formatx"
 	"github.com/gin-gonic/gin"
 )
+
+var debugMode = os.Getenv("DEBUG_MODE") == "true"
 
 var (
 	preProcessors = map[string]service.Beforer{
@@ -99,6 +102,11 @@ func chatHandler(c *gin.Context, defaultFormat string) {
 
 	if before.Stream {
 		slog.Info("starting stream response")
+		if debugMode {
+			slog.Debug("response headers", "headers", sanitizeHeaders(res.Header))
+			slog.Debug("client headers", "headers", sanitizeHeaders(c.Request.Header))
+		}
+
 		// 使用独立的context避免请求context取消影响流式响应
 		streamCtx := context.Background()
 
@@ -110,7 +118,11 @@ func chatHandler(c *gin.Context, defaultFormat string) {
 		go service.RecordLog(context.Background(), startReq, pr, logProcessor, logId, *before, providersWithMeta.IOLog)
 
 		slog.Info("starting stream conversion")
-		if err := formatx.ConvertStream(streamCtx, reader, c.Writer, providerType, requestFormat, before.Model); err != nil {
+		if debugMode {
+			slog.Debug("convert stream", "providerType", providerType, "requestFormat", requestFormat, "model", before.Model)
+		}
+
+		if err := formatx.ConvertStream(streamCtx, reader, c.Writer, providerType, requestFormat, before.Model, debugMode); err != nil {
 			pw.CloseWithError(err)
 			if !errors.Is(err, context.Canceled) && !errors.Is(err, http.ErrAbortHandler) && !errors.Is(err, io.ErrClosedPipe) {
 				slog.Error("convert stream error", "error", err)
@@ -128,18 +140,30 @@ func chatHandler(c *gin.Context, defaultFormat string) {
 		common.InternalServerError(c, err.Error())
 		return
 	}
+	if debugMode {
+		slog.Debug("non-stream response read", "bytes", len(bodyBytes))
+	}
 	go service.RecordLog(context.Background(), startReq, io.NopCloser(bytes.NewReader(bodyBytes)), logProcessor, logId, *before, providersWithMeta.IOLog)
 
 	respBody, err := formatx.ConvertResponse(bodyBytes, providerType, requestFormat, before.Model)
 	if err != nil {
+		slog.Error("convert response failed", "error", err)
 		common.InternalServerError(c, err.Error())
 		return
 	}
+	if debugMode {
+		slog.Debug("response converted", "original_bytes", len(bodyBytes), "converted_bytes", len(respBody))
+	}
 	c.Writer.Header().Del("Content-Length")
 	c.Header("Content-Length", fmt.Sprintf("%d", len(respBody)))
-	if _, err := c.Writer.Write(respBody); err != nil {
+	written, err := c.Writer.Write(respBody)
+	if err != nil {
+		slog.Error("write response failed", "bytes", written, "error", err)
 		common.InternalServerError(c, err.Error())
 		return
+	}
+	if debugMode {
+		slog.Debug("response written to client", "bytes", written)
 	}
 }
 
@@ -168,4 +192,26 @@ func defaultFormatFromPath(path string) string {
 	default:
 		return consts.StyleOpenAI
 	}
+}
+
+// sanitizeHeaders 屏蔽敏感头部信息用于日志记录
+func sanitizeHeaders(headers http.Header) map[string]string {
+	sensitiveKeys := map[string]bool{
+		"authorization": true,
+		"cookie":        true,
+		"set-cookie":    true,
+		"api-key":       true,
+		"x-api-key":     true,
+	}
+
+	safe := make(map[string]string)
+	for k, v := range headers {
+		lowerKey := strings.ToLower(k)
+		if sensitiveKeys[lowerKey] {
+			safe[k] = "[REDACTED]"
+		} else if len(v) > 0 {
+			safe[k] = v[0]
+		}
+	}
+	return safe
 }
