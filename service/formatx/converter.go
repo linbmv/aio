@@ -285,6 +285,7 @@ func AnthropicSSEToOpenAIRes(r io.Reader, w io.Writer, model string, debug bool)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	var eventType string
 	var chunkCount, totalBytes int
+	var started bool
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -301,6 +302,15 @@ func AnthropicSSEToOpenAIRes(r io.Reader, w io.Writer, model string, debug bool)
 			case "content_block_delta":
 				text := gjson.Get(data, "delta.text").String()
 				if text != "" {
+					// 发送初始事件以唤醒客户端
+					if !started {
+						fmt.Fprintf(w, ": ping\n\n")
+						if flusher, ok := w.(http.Flusher); ok {
+							flusher.Flush()
+						}
+						started = true
+					}
+
 					chunk := map[string]interface{}{
 						"model":  model,
 						"output": text,
