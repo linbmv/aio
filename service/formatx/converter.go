@@ -373,6 +373,11 @@ func OpenAIResponsesAPISSEToOpenAIRes(r io.Reader, w io.Writer, model string, de
 	for scanner.Scan() {
 		line := scanner.Text()
 
+		// 调试：记录所有接收到的行
+		if debug && line != "" {
+			slog.Debug("OpenAIResponsesAPISSEToOpenAIRes received line", "line", line)
+		}
+
 		// 跳过注释行和空行
 		if strings.HasPrefix(line, ":") || line == "" {
 			continue
