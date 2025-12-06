@@ -1016,9 +1016,13 @@ func CanConvert(from, to string) bool {
 func OpenAISSEToOpenAIRes(r io.Reader, w io.Writer, model string) error {
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	var rawLines []string
+	var chunkCount int
 	for scanner.Scan() {
-		line := strings.TrimPrefix(scanner.Text(), "data: ")
-		if line == "" || line == scanner.Text() {
+		text := scanner.Text()
+		rawLines = append(rawLines, text)
+		line := strings.TrimPrefix(text, "data: ")
+		if line == "" || line == text {
 			continue
 		}
 		if line == "[DONE]" {
@@ -1031,9 +1035,25 @@ func OpenAISSEToOpenAIRes(r io.Reader, w io.Writer, model string) error {
 			payload, _ := json.Marshal(map[string]any{"model": model, "output": content})
 			fmt.Fprintf(w, "data: %s\n\n", payload)
 			safeFlush(w)
+			chunkCount++
 		}
 	}
-	return scanner.Err()
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	if chunkCount == 0 && len(rawLines) > 0 {
+		raw := strings.TrimSpace(strings.Join(rawLines, "\n"))
+		if raw != "" {
+			if payload, convErr := OpenAIRespToOpenAIRes([]byte(raw), model); convErr == nil {
+				fmt.Fprintf(w, "data: %s\n\n", payload)
+				fmt.Fprint(w, "data: [DONE]\n\n")
+				safeFlush(w)
+				return nil
+			}
+		}
+		return fmt.Errorf("openai stream ended without data")
+	}
+	return nil
 }
 
 // OpenAIResSSEToOpenAI 将 OpenAI-Res SSE 流转换为 OpenAI SSE 格式
