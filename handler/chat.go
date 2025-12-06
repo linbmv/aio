@@ -168,17 +168,41 @@ func chatHandler(c *gin.Context, defaultFormat string) {
 }
 
 func writeHeader(c *gin.Context, stream bool, header http.Header) {
+	// hop-by-hop headers that should not be forwarded
+	hopByHop := map[string]bool{
+		"connection":        true,
+		"proxy-connection": true,
+		"keep-alive":        true,
+		"transfer-encoding": true,
+		"upgrade":           true,
+		"te":                true,
+		"trailer":           true,
+	}
+
+	// Copy headers from upstream, excluding hop-by-hop and problematic headers
 	for k, values := range header {
-		for _, value := range values {
-			c.Writer.Header().Add(k, value)
+		lowerKey := strings.ToLower(k)
+		if hopByHop[lowerKey] {
+			continue
 		}
+		// For streaming, remove Content-Length and Content-Encoding
+		if stream && (lowerKey == "content-length" || lowerKey == "content-encoding") {
+			continue
+		}
+		// Use Set instead of Add to avoid duplicate headers
+		c.Writer.Header()[k] = append([]string(nil), values...)
 	}
 
 	if stream {
+		// Disable gzip for SSE streams
+		c.Set("gzip-abort", true)
+		// Set SSE headers
 		c.Header("Content-Type", "text/event-stream")
 		c.Header("Cache-Control", "no-cache")
 		c.Header("Connection", "keep-alive")
 		c.Header("X-Accel-Buffering", "no")
+		// Ensure no Content-Length
+		c.Writer.Header().Del("Content-Length")
 	}
 	c.Writer.Flush()
 }

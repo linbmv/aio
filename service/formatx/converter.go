@@ -281,11 +281,14 @@ func AnthropicSSEToOpenAI(r io.Reader, w io.Writer, model string) error {
 
 // AnthropicSSEToOpenAIRes 将 Anthropic SSE 流转换为 OpenAI-Res SSE 格式
 func AnthropicSSEToOpenAIRes(r io.Reader, w io.Writer, model string, debug bool) error {
+	// 立即发送ping以唤醒客户端SSE读取器，防止超时
+	fmt.Fprintf(w, ": ping\n\n")
+	safeFlush(w)
+
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	var eventType string
 	var chunkCount, totalBytes int
-	var started bool
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -302,15 +305,6 @@ func AnthropicSSEToOpenAIRes(r io.Reader, w io.Writer, model string, debug bool)
 			case "content_block_delta":
 				text := gjson.Get(data, "delta.text").String()
 				if text != "" {
-					// 发送初始事件以唤醒客户端
-					if !started {
-						fmt.Fprintf(w, ": ping\n\n")
-						if flusher, ok := w.(http.Flusher); ok {
-							flusher.Flush()
-						}
-						started = true
-					}
-
 					chunk := map[string]interface{}{
 						"model":  model,
 						"output": text,
@@ -564,17 +558,30 @@ func ConvertStream(ctx context.Context, r io.Reader, w io.Writer, from, to, mode
 	}
 
 	if from == to {
-		n, err := io.Copy(w, streamReader)
-		if err != nil {
-			return fmt.Errorf("stream copy failed after %d bytes: %w", n, err)
+		// Use buffered copy with immediate flush for each chunk
+		buf := make([]byte, 4096)
+		var totalBytes int64
+		for {
+			n, readErr := streamReader.Read(buf)
+			if n > 0 {
+				written, writeErr := w.Write(buf[:n])
+				totalBytes += int64(written)
+				if writeErr != nil {
+					return fmt.Errorf("stream write failed after %d bytes: %w", totalBytes, writeErr)
+				}
+				// Flush immediately after each write
+				safeFlush(w)
+			}
+			if readErr != nil {
+				if readErr == io.EOF {
+					if debug {
+						slog.Debug("ConvertStream direct copy completed", "bytes", totalBytes)
+					}
+					return nil
+				}
+				return fmt.Errorf("stream copy failed after %d bytes: %w", totalBytes, readErr)
+			}
 		}
-		if flusher, ok := w.(http.Flusher); ok {
-			flusher.Flush()
-		}
-		if debug {
-			slog.Debug("ConvertStream direct copy completed", "bytes", n)
-		}
-		return nil
 	}
 
 	var err error
