@@ -29,7 +29,7 @@ type ModelRequest struct {
 	Remark   string `json:"remark"`
 	MaxRetry int    `json:"max_retry"`
 	TimeOut  int    `json:"time_out"`
-	IOLog    bool   `json:"io_log"`
+	IOLog    *bool  `json:"io_log"`
 	Strategy string `json:"strategy"`
 }
 
@@ -255,13 +255,17 @@ func CreateModel(c *gin.Context) {
 	if strategy == "" {
 		strategy = consts.BalancerDefault
 	}
+	ioLog := req.IOLog
+	if ioLog == nil {
+		ioLog = new(bool) // 默认为 false
+	}
 
 	model := models.Model{
 		Name:     req.Name,
 		Remark:   req.Remark,
 		MaxRetry: req.MaxRetry,
 		TimeOut:  req.TimeOut,
-		IOLog:    &req.IOLog,
+		IOLog:    ioLog,
 		Strategy: strategy,
 	}
 
@@ -289,7 +293,7 @@ func UpdateModel(c *gin.Context) {
 	}
 
 	// Check if model exists
-	_, err = gorm.G[models.Model](models.DB).Where("id = ?", id).First(c.Request.Context())
+	existing, err := gorm.G[models.Model](models.DB).Where("id = ?", id).First(c.Request.Context())
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			common.NotFound(c, "Model not found")
@@ -303,6 +307,10 @@ func UpdateModel(c *gin.Context) {
 	if strategy == "" {
 		strategy = consts.BalancerDefault
 	}
+	ioLog := existing.IOLog
+	if req.IOLog != nil {
+		ioLog = req.IOLog
+	}
 
 	// Update fields
 	updates := models.Model{
@@ -310,7 +318,7 @@ func UpdateModel(c *gin.Context) {
 		Remark:   req.Remark,
 		MaxRetry: req.MaxRetry,
 		TimeOut:  req.TimeOut,
-		IOLog:    &req.IOLog,
+		IOLog:    ioLog,
 		Strategy: strategy,
 	}
 
@@ -513,7 +521,7 @@ func UpdateModelProvider(c *gin.Context) {
 	}
 
 	// Check if model-provider association exists
-	_, err = gorm.G[models.ModelWithProvider](models.DB).Where("id = ?", id).First(c.Request.Context())
+	existing, err := gorm.G[models.ModelWithProvider](models.DB).Where("id = ?", id).First(c.Request.Context())
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			common.NotFound(c, "Model-provider association not found")
@@ -534,6 +542,7 @@ func UpdateModelProvider(c *gin.Context) {
 		WithHeader:       &req.WithHeader,
 		CustomerHeaders:  customerHeaders,
 		Weight:           req.Weight,
+		Status:           existing.Status,
 	}
 
 	if _, err := gorm.G[models.ModelWithProvider](models.DB).Where("id = ?", id).Updates(c.Request.Context(), updates); err != nil {
