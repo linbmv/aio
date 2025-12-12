@@ -24,6 +24,17 @@ const formatTime = (nanoseconds: number): string => {
   return `${(nanoseconds / 1000000000).toFixed(2)} s`;
 };
 
+// 格式化日期时间显示
+const formatDateTime = (dateString: string): string => {
+  const date = new Date(dateString);
+  const month = date.getMonth() + 1;
+  const day = date.getDate();
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const seconds = String(date.getSeconds()).padStart(2, '0');
+  return `${month}/${day}, ${hours}:${minutes}:${seconds}`;
+};
+
 // 格式化字节大小显示
 const formatBytes = (bytes: number): string => {
   if (bytes === 0) return '0 B';
@@ -264,14 +275,13 @@ export default function LogsPage() {
                     <TableRow className="hover:bg-secondary/90">
                       <TableHead>时间</TableHead>
                       <TableHead>模型</TableHead>
-                      <TableHead>项目</TableHead>
                       <TableHead>状态</TableHead>
                       <TableHead>Tokens</TableHead>
-                      <TableHead>响应大小</TableHead>
                       <TableHead>耗时</TableHead>
                       <TableHead>提供商模型</TableHead>
                       <TableHead>类型</TableHead>
                       <TableHead>提供商</TableHead>
+                      <TableHead>Key</TableHead>
                       <TableHead className="w-[140px]">操作</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -279,24 +289,20 @@ export default function LogsPage() {
                     {logs.map((log) => (
                       <TableRow key={log.ID}>
                         <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                          {new Date(log.CreatedAt).toLocaleString()}
+                          {formatDateTime(log.CreatedAt)}
                         </TableCell>
                         <TableCell className="font-medium">{log.Name}</TableCell>
-                        <TableCell className="text-xs">{log.key_name || '-'}</TableCell>
-                        <TableCell>
-                          <span className={`inline-flex items-center px-2 py-1 ${log.Status === 'success' ? 'text-green-500' : 'text-red-500 '
-                            }`}>
-                            {log.Status}
+                        <TableCell className="text-center">
+                          <span className="text-lg">
+                            {log.Status === 'success' ? '✅' : '❌'}
                           </span>
                         </TableCell>
                         <TableCell>{log.total_tokens}</TableCell>
-                        <TableCell className="text-xs">
-                          {log.Size ? formatBytes(log.Size) : '-'}
-                        </TableCell>
                         <TableCell>{formatTime(log.ChunkTime)}</TableCell>
                         <TableCell className="max-w-[120px] truncate text-xs" title={log.ProviderModel}>{log.ProviderModel}</TableCell>
                         <TableCell className="text-xs">{log.Style}</TableCell>
                         <TableCell className="text-xs">{log.ProviderName}</TableCell>
+                        <TableCell className="text-xs">{log.provider_key_name || '-'}</TableCell>
                         <TableCell>
                           <div className="flex gap-2">
                             <Button variant="ghost" size="sm" className="h-8 px-2" onClick={() => openDetailDialog(log)}>
@@ -324,14 +330,11 @@ export default function LogsPage() {
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
                         <h3 className="font-semibold text-sm truncate">{log.Name}</h3>
-                        <p className="text-[11px] text-muted-foreground">{new Date(log.CreatedAt).toLocaleString()}</p>
+                        <p className="text-[11px] text-muted-foreground">{formatDateTime(log.CreatedAt)}</p>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span
-                          className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${log.Status === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                            }`}
-                        >
-                          {log.Status}
+                        <span className="text-lg">
+                          {log.Status === 'success' ? '✅' : '❌'}
                         </span>
                         <div className="flex gap-1.5">
                           <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={() => openDetailDialog(log)}>

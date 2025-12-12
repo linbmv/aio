@@ -435,6 +435,7 @@ export interface ChatLog {
   total_tokens: number;
   prompt_tokens_details: PromptTokensDetails;
   key_name: string;
+  provider_key_name: string;
 }
 
 export interface PromptTokensDetails {
