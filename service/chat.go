@@ -152,6 +152,7 @@ func BalanceChat(ctx context.Context, start time.Time, style string, before Befo
 				UserAgent:     reqMeta.UserAgent,
 				RemoteIP:      reqMeta.RemoteIP,
 				AuthKeyID:     authKeyID,
+				ProviderKeyID: 0, // 将在获取 key 后更新
 				ChatIO:        providersWithMeta.IOLog,
 				Retry:         retry,
 				ProxyTime:     time.Since(start),
@@ -171,6 +172,7 @@ func BalanceChat(ctx context.Context, start time.Time, style string, before Befo
 					slog.Warn("key pool pick failed", "provider", provider.Name, "error", err)
 				} else {
 					keyID = kid
+					log.ProviderKeyID = keyID
 					switch style {
 					case consts.StyleAnthropic:
 						header.Set("x-api-key", keyFromPool)

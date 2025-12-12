@@ -175,6 +175,21 @@ type AnthropicUsage struct {
 	ServiceTier              string `json:"service_tier"`
 }
 
+func mergeAnthropicUsage(target *AnthropicUsage, source gjson.Result) {
+	if v := source.Get("input_tokens").Int(); v > 0 {
+		target.InputTokens += v
+	}
+	if v := source.Get("cache_creation_input_tokens").Int(); v > 0 {
+		target.CacheCreationInputTokens += v
+	}
+	if v := source.Get("cache_read_input_tokens").Int(); v > 0 {
+		target.CacheReadInputTokens += v
+	}
+	if v := source.Get("output_tokens").Int(); v > 0 {
+		target.OutputTokens += v
+	}
+}
+
 func ProcesserOpenAiRes(ctx context.Context, pr io.Reader, stream bool, start time.Time) (*models.ChatLog, *models.OutputUnion, error) {
 	// 首字时延
 	var firstChunkTime time.Duration
@@ -254,14 +269,13 @@ func ProcesserAnthropic(ctx context.Context, pr io.Reader, stream bool, start ti
 	var firstChunkTime time.Duration
 	var once sync.Once
 
-	var usageStr string
+	var athropicUsage AnthropicUsage
 
 	var output models.OutputUnion
 	var size int
 
 	scanner := bufio.NewScanner(pr)
 	scanner.Buffer(make([]byte, 0, InitScannerBufferSize), MaxScannerBufferSize)
-	var event string
 	for chunk, chunkSize := range ScannerToken(scanner) {
 		select {
 		case <-ctx.Done():
@@ -274,12 +288,16 @@ func ProcesserAnthropic(ctx context.Context, pr io.Reader, stream bool, start ti
 		})
 		if !stream {
 			output.OfString = chunk
-			usageStr = gjson.Get(chunk, "usage").String()
+			if usageStr := gjson.Get(chunk, "usage").String(); usageStr != "" {
+				usage := []byte(usageStr)
+				if json.Valid(usage) {
+					json.Unmarshal(usage, &athropicUsage)
+				}
+			}
 			break
 		}
 
-		if after, ok := strings.CutPrefix(chunk, "event: "); ok {
-			event = after
+		if _, ok := strings.CutPrefix(chunk, "event: "); ok {
 			continue
 		}
 
@@ -292,24 +310,26 @@ func ProcesserAnthropic(ctx context.Context, pr io.Reader, stream bool, start ti
 			return nil, nil, err
 		}
 		output.OfStringArray = append(output.OfStringArray, after)
-		if event == "message_delta" {
-			usageStr = gjson.Get(after, "usage").String()
+
+		// 从所有事件中提取 usage 并合并
+		if topUsage := gjson.Get(after, "usage"); topUsage.Exists() {
+			mergeAnthropicUsage(&athropicUsage, topUsage)
+		}
+		if msgUsage := gjson.Get(after, "message.usage"); msgUsage.Exists() {
+			mergeAnthropicUsage(&athropicUsage, msgUsage)
 		}
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, nil, err
 	}
 
-	var athropicUsage AnthropicUsage
-	usage := []byte(usageStr)
-	if json.Valid(usage) {
-		if err := json.Unmarshal(usage, &athropicUsage); err != nil {
-			return nil, nil, err
-		}
-	}
-
 	chunkTime := time.Since(start) - firstChunkTime
 	totalTokens := athropicUsage.InputTokens + athropicUsage.OutputTokens
+
+	var tps float64
+	if chunkTime.Seconds() > 0 {
+		tps = float64(totalTokens) / chunkTime.Seconds()
+	}
 
 	return &models.ChatLog{
 		FirstChunkTime: firstChunkTime,
@@ -322,7 +342,7 @@ func ProcesserAnthropic(ctx context.Context, pr io.Reader, stream bool, start ti
 				CachedTokens: athropicUsage.CacheReadInputTokens,
 			},
 		},
-		Tps:  float64(totalTokens) / chunkTime.Seconds(),
+		Tps:  tps,
 		Size: size,
 	}, &output, nil
 }

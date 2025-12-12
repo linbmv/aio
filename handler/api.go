@@ -625,7 +625,8 @@ func DeleteModelProvider(c *gin.Context) {
 
 type WrapLog struct {
 	models.ChatLog
-	KeyName string `json:"key_name"`
+	KeyName         string `json:"key_name"`
+	ProviderKeyName string `json:"provider_key_name"`
 }
 
 // GetRequestLogs 获取最近的请求日志（支持分页和筛选）
@@ -687,6 +688,14 @@ func GetRequestLogs(c *gin.Context) {
 
 	keyMap := lo.KeyBy(keys, func(key models.AuthKey) uint { return key.ID })
 
+	// 查询 provider keys
+	providerKeys, err := gorm.G[models.ProviderKey](models.DB).Where("id IN ?", lo.Map(logs, func(log models.ChatLog, _ int) uint { return log.ProviderKeyID })).Find(c.Request.Context())
+	if err != nil {
+		common.InternalServerError(c, "Failed to query provider keys: "+err.Error())
+		return
+	}
+	providerKeyMap := lo.KeyBy(providerKeys, func(key models.ProviderKey) uint { return key.ID })
+
 	var wrapLogs []WrapLog
 	for _, log := range logs {
 		var keyName string
@@ -696,13 +705,25 @@ func GetRequestLogs(c *gin.Context) {
 		if log.AuthKeyID == 0 {
 			keyName = "admin"
 		}
+
+		// 获取 provider key name
+		var providerKeyName string
+		if providerKey, ok := providerKeyMap[log.ProviderKeyID]; ok {
+			if providerKey.Remark != "" {
+				providerKeyName = providerKey.Remark
+			} else if len(providerKey.Key) >= 8 {
+				providerKeyName = providerKey.Key[:4] + "..." + providerKey.Key[len(providerKey.Key)-4:]
+			}
+		}
+
 		// 修复无穷大值
 		if math.IsInf(log.Tps, 0) || math.IsNaN(log.Tps) {
 			log.Tps = 0
 		}
 		wrapLogs = append(wrapLogs, WrapLog{
-			ChatLog: log,
-			KeyName: keyName,
+			ChatLog:         log,
+			KeyName:         keyName,
+			ProviderKeyName: providerKeyName,
 		})
 	}
 

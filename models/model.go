@@ -33,20 +33,20 @@ type Model struct {
 
 type ModelWithProvider struct {
 	gorm.Model
-	ModelID          uint
-	ProviderModel    string
-	ProviderID       uint
-	ToolCall         *bool             // 能否接受带有工具调用的请求
-	StructuredOutput *bool             // 能否接受带有结构化输出的请求
-	Image            *bool             // 能否接受带有图片的请求(视觉)
-	WithHeader       *bool             // 是否透传header
-	Status           *bool             // 是否启用
-	CustomerHeaders  map[string]string `gorm:"serializer:json"` // 自定义headers
-	Weight           int `gorm:"default:1"`
-	KeyCooldownUntil      *time.Time // key级冷却截止时间
-	KeyCooldownStep       int        // key级退避次数
-	ProviderCooldownUntil *time.Time // 渠道冷却截止时间
-	ProviderCooldownStep  int        // 渠道退避次数
+	ModelID               uint
+	ProviderModel         string
+	ProviderID            uint
+	ToolCall              *bool             // 能否接受带有工具调用的请求
+	StructuredOutput      *bool             // 能否接受带有结构化输出的请求
+	Image                 *bool             // 能否接受带有图片的请求(视觉)
+	WithHeader            *bool             // 是否透传header
+	Status                *bool             // 是否启用
+	CustomerHeaders       map[string]string `gorm:"serializer:json"` // 自定义headers
+	Weight                int               `gorm:"default:1"`
+	KeyCooldownUntil      *time.Time        // key级冷却截止时间
+	KeyCooldownStep       int               // key级退避次数
+	ProviderCooldownUntil *time.Time        // 渠道冷却截止时间
+	ProviderCooldownStep  int               // 渠道退避次数
 }
 
 type ChatLog struct {
@@ -59,6 +59,7 @@ type ChatLog struct {
 	UserAgent     string `gorm:"index"` // 用户代理
 	RemoteIP      string // 访问ip
 	AuthKeyID     uint   `gorm:"index"` // 使用的AuthKey ID
+	ProviderKeyID uint   `gorm:"index"` // 使用的ProviderKey ID
 	ChatIO        bool   // 是否开启IO记录
 
 	Error          string        // if status is error, this field will be set
