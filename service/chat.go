@@ -305,7 +305,18 @@ func RecordLog(ctx context.Context, reqStart time.Time, reader io.ReadCloser, pr
 
 		handleStreamSuccess(ctx, streamCtx)
 
-		if _, err := gorm.G[models.ChatLog](models.DB).Where("id = ?", logId).Updates(ctx, *log); err != nil {
+		// 使用 map 更新以确保零值也能被更新
+		updates := map[string]interface{}{
+			"first_chunk_time":      log.FirstChunkTime,
+			"chunk_time":            log.ChunkTime,
+			"tps":                   log.Tps,
+			"size":                  log.Size,
+			"prompt_tokens":         log.PromptTokens,
+			"completion_tokens":     log.CompletionTokens,
+			"total_tokens":          log.TotalTokens,
+			"prompt_tokens_details": log.PromptTokensDetails,
+		}
+		if err := models.DB.WithContext(ctx).Model(&models.ChatLog{}).Where("id = ?", logId).Updates(updates).Error; err != nil {
 			return err
 		}
 		if ioLog {
