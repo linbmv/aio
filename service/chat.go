@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -282,19 +283,21 @@ func RecordLog(ctx context.Context, reqStart time.Time, reader io.ReadCloser, pr
 	streamCtx := streamContextFrom(ctx)
 	recordFunc := func() error {
 		defer reader.Close()
+		// 使用独立 context，避免请求结束后 context 被取消导致数据库更新失败
+		bgCtx := context.Background()
 		if ioLog {
-			if err := gorm.G[models.ChatIO](models.DB).Create(ctx, &models.ChatIO{
+			if err := gorm.G[models.ChatIO](models.DB).Create(bgCtx, &models.ChatIO{
 				Input: string(before.raw),
 				LogId: logId,
 			}); err != nil {
 				return err
 			}
 		}
-		log, output, err := processer(ctx, reader, before.Stream, reqStart)
+		log, output, err := processer(bgCtx, reader, before.Stream, reqStart)
 		if err != nil {
-			handleStreamError(ctx, streamCtx, err)
+			handleStreamError(bgCtx, streamCtx, err)
 			// 更新 ChatLog 状态为错误
-			if _, updateErr := gorm.G[models.ChatLog](models.DB).Where("id = ?", logId).Updates(ctx, models.ChatLog{
+			if _, updateErr := gorm.G[models.ChatLog](models.DB).Where("id = ?", logId).Updates(bgCtx, models.ChatLog{
 				Status: "error",
 				Error:  err.Error(),
 			}); updateErr != nil {
@@ -303,9 +306,10 @@ func RecordLog(ctx context.Context, reqStart time.Time, reader io.ReadCloser, pr
 			return err
 		}
 
-		handleStreamSuccess(ctx, streamCtx)
+		handleStreamSuccess(bgCtx, streamCtx)
 
 		// 使用 map 更新以确保零值也能被更新
+		promptDetailsJSON, _ := json.Marshal(log.PromptTokensDetails)
 		updates := map[string]interface{}{
 			"first_chunk_time":      log.FirstChunkTime,
 			"chunk_time":            log.ChunkTime,
@@ -314,13 +318,13 @@ func RecordLog(ctx context.Context, reqStart time.Time, reader io.ReadCloser, pr
 			"prompt_tokens":         log.PromptTokens,
 			"completion_tokens":     log.CompletionTokens,
 			"total_tokens":          log.TotalTokens,
-			"prompt_tokens_details": log.PromptTokensDetails,
+			"prompt_tokens_details": string(promptDetailsJSON),
 		}
-		if err := models.DB.WithContext(ctx).Model(&models.ChatLog{}).Where("id = ?", logId).Updates(updates).Error; err != nil {
+		if err := models.DB.WithContext(bgCtx).Model(&models.ChatLog{}).Where("id = ?", logId).Updates(updates).Error; err != nil {
 			return err
 		}
 		if ioLog {
-			if _, err := gorm.G[models.ChatIO](models.DB).Where("log_id = ?", logId).Updates(ctx, models.ChatIO{OutputUnion: *output}); err != nil {
+			if _, err := gorm.G[models.ChatIO](models.DB).Where("log_id = ?", logId).Updates(bgCtx, models.ChatIO{OutputUnion: *output}); err != nil {
 				return err
 			}
 		}
