@@ -577,9 +577,9 @@ export default function ModelProvidersPage() {
       model_id: selectedModelId || 0,
       provider_name: "",
       provider_id: 0,
-      tool_call: false,
-      structured_output: false,
-      image: false,
+      tool_call: true,
+      structured_output: true,
+      image: true,
       with_header: false,
       weight: 1,
       customer_headers: []

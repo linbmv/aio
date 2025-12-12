@@ -111,7 +111,7 @@ export default function LogsPage() {
         style: styleFilter === "all" ? undefined : styleFilter,
         authKeyId: authKeyFilter === "all" ? undefined : authKeyFilter
       });
-      setLogs(result.data);
+      setLogs(result.data || []);
       setTotal(result.total);
       setPages(result.pages);
     } catch (error) {
