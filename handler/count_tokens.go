@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"io"
@@ -10,9 +11,16 @@ import (
 	"github.com/atopos31/llmio/common"
 	"github.com/atopos31/llmio/models"
 	"github.com/atopos31/llmio/providers"
+	"github.com/atopos31/llmio/service"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
+
+type countTokensConfig struct {
+	models.AnthropicCountTokens
+	LocalEnabled   bool `json:"local_enabled"`
+	RemoteFallback bool `json:"remote_fallback"`
+}
 
 func CountTokens(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -27,10 +35,34 @@ func CountTokens(c *gin.Context) {
 		return
 	}
 
-	var anthropicConfig models.AnthropicCountTokens
+	var anthropicConfig countTokensConfig
 	if err := json.Unmarshal([]byte(config.Value), &anthropicConfig); err != nil {
 		common.InternalServerError(c, "Failed to parse Anthropic count tokens config: "+err.Error())
 		return
+	}
+
+	body, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		common.BadRequest(c, "Failed to read request body: "+err.Error())
+		return
+	}
+	c.Request.Body.Close()
+
+	useLocal := anthropicConfig.LocalEnabled
+	if override := c.Query("local"); override != "" {
+		useLocal = override == "1" || strings.EqualFold(override, "true")
+	}
+
+	if useLocal {
+		tokens, err := service.EstimateCountTokens(body)
+		if err == nil {
+			c.JSON(http.StatusOK, CountTokensResponse{InputTokens: int64(tokens)})
+			return
+		}
+		if !anthropicConfig.RemoteFallback {
+			common.BadRequest(c, "本地计数失败: "+err.Error())
+			return
+		}
 	}
 
 	anthropic := providers.Anthropic{
@@ -39,7 +71,7 @@ func CountTokens(c *gin.Context) {
 		Version: anthropicConfig.Version,
 	}
 
-	req, err := anthropic.BuildCountTokensReq(ctx, c.Request.Header, c.Request.Body)
+	req, err := anthropic.BuildCountTokensReq(ctx, c.Request.Header, bytes.NewReader(body))
 	if err != nil {
 		common.InternalServerError(c, "Failed to create request: "+err.Error())
 		return

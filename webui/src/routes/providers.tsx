@@ -60,8 +60,9 @@ import {
 } from "@/lib/api";
 import type { Provider, ProviderTemplate, ProviderModel } from "@/lib/api";
 import { toast } from "sonner";
+import KeyManager, { type KeyConfig } from "@/components/KeyManager";
 
-type ConfigFieldMap = Record<string, string>;
+type ConfigFieldMap = Record<string, string | KeyConfig[]>;
 
 const parseConfigJson = (raw?: string | null): ConfigFieldMap | null => {
   if (!raw) return null;
@@ -70,8 +71,20 @@ const parseConfigJson = (raw?: string | null): ConfigFieldMap | null => {
     if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
       return null;
     }
-    const entries: [string, string][] = [];
+    const entries: [string, string | KeyConfig[]][] = [];
     for (const [key, value] of Object.entries(parsed)) {
+      if (key === "keys" && Array.isArray(value)) {
+        // 处理keys数组
+        const keys = value.filter(item =>
+          typeof item === "object" &&
+          item !== null &&
+          typeof item.term === "string" &&
+          typeof item.remark === "string" &&
+          typeof item.status === "boolean"
+        ) as KeyConfig[];
+        entries.push([key, keys]);
+        continue;
+      }
       if (["string", "number", "boolean"].includes(typeof value)) {
         entries.push([key, String(value)]);
         continue;
@@ -86,6 +99,20 @@ const parseConfigJson = (raw?: string | null): ConfigFieldMap | null => {
 
 const stringifyConfigFields = (fields: ConfigFieldMap) =>
   JSON.stringify(fields, null, 2);
+
+// 兼容旧配置：如果有api_key但没有keys，自动转换
+const migrateApiKeyToKeys = (fields: ConfigFieldMap): ConfigFieldMap => {
+  if (fields.api_key && !fields.keys) {
+    const apiKey = String(fields.api_key);
+    if (apiKey.trim()) {
+      return {
+        ...fields,
+        keys: [{ term: apiKey, remark: '', status: true }]
+      };
+    }
+  }
+  return fields;
+};
 
 const mergeTemplateWithConfig = (
   templateFields: ConfigFieldMap,
@@ -111,7 +138,8 @@ const mergeTemplateWithConfig = (
 
 const getConfigBaseUrl = (config: string): string => {
   const parsed = parseConfigJson(config);
-  return parsed?.base_url ?? "未设置";
+  const baseUrl = parsed?.base_url;
+  return typeof baseUrl === 'string' ? baseUrl : "未设置";
 };
 
 // 定义表单验证模式
@@ -196,12 +224,13 @@ export default function ProvidersPage() {
     if (!nextFields && editingProvider && editingProvider.Type === selectedProviderType) {
       const editingConfig = parseConfigJson(editingProvider.Config);
       if (editingConfig) {
-        nextFields = mergeTemplateWithConfig(templateFields, editingConfig, true);
+        const migratedConfig = migrateApiKeyToKeys(editingConfig);
+        nextFields = mergeTemplateWithConfig(templateFields, migratedConfig, true);
       }
     }
 
     if (!nextFields) {
-      nextFields = templateFields;
+      nextFields = migrateApiKeyToKeys(templateFields);
     }
 
     configCacheRef.current[selectedProviderType] = nextFields;
@@ -285,7 +314,7 @@ export default function ProvidersPage() {
     toast.success(`已复制模型名称: ${modelName}`);
   };
 
-  const handleConfigFieldChange = (key: string, value: string) => {
+  const handleConfigFieldChange = (key: string, value: string | KeyConfig[]) => {
     setConfigFields((prev) => {
       const updatedFields = { ...prev, [key]: value };
       if (selectedProviderType) {
@@ -690,7 +719,17 @@ export default function ProvidersPage() {
                 name="config"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>配置</FormLabel>
+                    <div className="flex items-center justify-between">
+                      <FormLabel>配置</FormLabel>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setStructuredConfigEnabled(!structuredConfigEnabled)}
+                      >
+                        {structuredConfigEnabled ? "JSON编辑" : "表单编辑"}
+                      </Button>
+                    </div>
                     {structuredConfigEnabled ? (
                       Object.keys(configFields).length === 0 ? (
                         <p className="text-sm text-muted-foreground">
@@ -698,20 +737,36 @@ export default function ProvidersPage() {
                         </p>
                       ) : (
                         <div className="space-y-3">
-                          {Object.entries(configFields).map(([key, value]) => (
-                            <div key={key} className="space-y-1">
-                              <Label className="text-xs font-medium text-muted-foreground">
-                                {key}
-                              </Label>
-                              <Input
-                                value={value}
-                                onChange={(event) =>
-                                  handleConfigFieldChange(key, event.target.value)
-                                }
-                                placeholder={`请输入 ${key}`}
-                              />
-                            </div>
-                          ))}
+                          {Object.entries(configFields).map(([key, value]) => {
+                            if (key === "keys" && Array.isArray(value)) {
+                              return (
+                                <div key={key}>
+                                  <KeyManager
+                                    keys={value as KeyConfig[]}
+                                    onChange={(newKeys) => handleConfigFieldChange(key, newKeys)}
+                                  />
+                                </div>
+                              );
+                            }
+                            // 有keys时隐藏api_key字段
+                            if (key === "api_key" && configFields.keys) {
+                              return null;
+                            }
+                            return (
+                              <div key={key} className="space-y-1">
+                                <Label className="text-xs font-medium text-muted-foreground">
+                                  {key}
+                                </Label>
+                                <Input
+                                  value={String(value)}
+                                  onChange={(event) =>
+                                    handleConfigFieldChange(key, event.target.value)
+                                  }
+                                  placeholder={`请输入 ${key}`}
+                                />
+                              </div>
+                            );
+                          })}
                         </div>
                       )
                     ) : (
