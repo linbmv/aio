@@ -30,6 +30,9 @@ func Init(ctx context.Context, path string) {
 		&Config{},
 		&AuthKey{},
 		&ProviderKey{},
+		// 新增统一Provider系统表
+		&Channel{},
+		&ModelMapping{},
 	); err != nil {
 		panic(err)
 	}

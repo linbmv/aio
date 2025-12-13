@@ -121,6 +121,25 @@ func main() {
 		api.GET("/test/:id", handler.ProviderTestHandler)
 		api.GET("/test/react/:id", handler.TestReactHandler)
 		api.GET("/test/count_tokens", handler.TestCountTokens)
+
+		// Channel management (统一Provider系统)
+		api.GET("/channels", handler.GetChannels)
+		api.GET("/channels/stats", handler.GetChannelStats)
+		api.GET("/channels/:id", handler.GetChannel)
+		api.POST("/channels", handler.CreateChannel)
+		api.PUT("/channels/:id", handler.UpdateChannel)
+		api.DELETE("/channels/:id", handler.DeleteChannel)
+		api.POST("/channels/:id/reset-cooldown", handler.ResetChannelCooldown)
+
+		// Model mapping management
+		api.GET("/model-mappings", handler.GetModelMappings)
+		api.POST("/model-mappings", handler.CreateModelMapping)
+		api.PUT("/model-mappings/:id", handler.UpdateModelMapping)
+		api.DELETE("/model-mappings/:id", handler.DeleteModelMapping)
+
+		// Balancer and protocol information
+		api.GET("/balancer-types", handler.GetBalancerTypes)
+		api.GET("/supported-protocols", handler.GetSupportedProtocols)
 	}
 	setwebui(router)
 	router.Run(":7070")

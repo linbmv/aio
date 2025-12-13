@@ -19,10 +19,15 @@ import (
 
 // ProviderRequest represents the request body for creating/updating a provider
 type ProviderRequest struct {
-	Name    string `json:"name"`
-	Type    string `json:"type"`
-	Config  string `json:"config"`
-	Console string `json:"console"`
+	Name               string                 `json:"name"`
+	Type               string                 `json:"type"`
+	Config             string                 `json:"config"`
+	Console            string                 `json:"console"`
+
+	// 新增统一Provider系统字段
+	SupportedProtocols []string               `json:"supported_protocols"`
+	ProtocolConfig     map[string]interface{} `json:"protocol_config"`
+	IsUnified          bool                   `json:"is_unified"`
 }
 
 // ModelRequest represents the request body for creating/updating a model
@@ -132,11 +137,30 @@ func CreateProvider(c *gin.Context) {
 		return
 	}
 
+	// 设置默认值
+	if req.SupportedProtocols == nil {
+		// 根据Provider类型设置默认支持的协议
+		switch strings.ToLower(req.Type) {
+		case "openai":
+			req.SupportedProtocols = []string{"openai"}
+		case "anthropic":
+			req.SupportedProtocols = []string{"anthropic"}
+		default:
+			req.SupportedProtocols = []string{"openai", "anthropic"}
+		}
+	}
+	if req.ProtocolConfig == nil {
+		req.ProtocolConfig = make(map[string]interface{})
+	}
+
 	provider := models.Provider{
-		Name:    req.Name,
-		Type:    req.Type,
-		Config:  req.Config,
-		Console: req.Console,
+		Name:               req.Name,
+		Type:               req.Type,
+		Config:             req.Config,
+		Console:            req.Console,
+		SupportedProtocols: req.SupportedProtocols,
+		ProtocolConfig:     req.ProtocolConfig,
+		IsUnified:          req.IsUnified,
 	}
 
 	if err := gorm.G[models.Provider](models.DB).Create(c.Request.Context(), &provider); err != nil {
@@ -177,12 +201,31 @@ func UpdateProvider(c *gin.Context) {
 		return
 	}
 
+	// 设置默认值
+	if req.SupportedProtocols == nil {
+		// 根据Provider类型设置默认支持的协议
+		switch strings.ToLower(req.Type) {
+		case "openai":
+			req.SupportedProtocols = []string{"openai"}
+		case "anthropic":
+			req.SupportedProtocols = []string{"anthropic"}
+		default:
+			req.SupportedProtocols = []string{"openai", "anthropic"}
+		}
+	}
+	if req.ProtocolConfig == nil {
+		req.ProtocolConfig = make(map[string]interface{})
+	}
+
 	// Update fields
 	updates := models.Provider{
-		Name:    req.Name,
-		Type:    req.Type,
-		Config:  req.Config,
-		Console: req.Console,
+		Name:               req.Name,
+		Type:               req.Type,
+		Config:             req.Config,
+		Console:            req.Console,
+		SupportedProtocols: req.SupportedProtocols,
+		ProtocolConfig:     req.ProtocolConfig,
+		IsUnified:          req.IsUnified,
 	}
 
 	if _, err := gorm.G[models.Provider](models.DB).Where("id = ?", id).Updates(c.Request.Context(), updates); err != nil {

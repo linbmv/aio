@@ -9,10 +9,15 @@ import (
 
 type Provider struct {
 	gorm.Model
-	Name    string
-	Type    string
-	Config  string
-	Console string // 控制台地址
+	Name               string                 `json:"name"`
+	Type               string                 `json:"type"`
+	Config             string                 `json:"config"`
+	Console            string                 `json:"console"` // 控制台地址
+
+	// 新增字段支持统一Provider系统
+	SupportedProtocols []string               `json:"supported_protocols" gorm:"serializer:json"` // 支持的协议列表
+	ProtocolConfig     map[string]interface{} `json:"protocol_config" gorm:"serializer:json"`     // 协议特定配置
+	IsUnified          bool                   `json:"is_unified" gorm:"default:false"`            // 是否为统一Provider
 }
 
 type AnthropicConfig struct {
