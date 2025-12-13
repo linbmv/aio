@@ -15,6 +15,8 @@ const (
 	BalancerRotor = "rotor"
 	// 平滑加权轮询
 	BalancerSmoothWeightedRR = "smooth_weighted_rr"
+	// 一致性哈希，最大化缓存命中率
+	BalancerConsistentHash = "consistent_hash"
 	// 默认策略
 	BalancerDefault = BalancerLottery
 )

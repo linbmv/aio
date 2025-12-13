@@ -69,6 +69,11 @@ type ChatLog struct {
 	ChunkTime      time.Duration // chunk耗时
 	Tps            float64
 	Size           int // 响应大小 字节
+
+	// 缓存相关字段
+	Cached         bool  `gorm:"index;default:false"` // 是否来源于缓存命中
+	CachedFromLogID *uint `gorm:"index"`              // 指向最初生成缓存的日志ID
+
 	Usage
 }
 
