@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"time"
 
 	"github.com/atopos31/llmio/consts"
 	"github.com/atopos31/llmio/models"
