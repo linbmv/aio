@@ -3,8 +3,6 @@ package adapters
 import (
 	"encoding/json"
 	"net/http"
-
-	"github.com/atopos31/llmio/providers/unified"
 )
 
 // AnthropicAdapter Anthropic协议适配器
