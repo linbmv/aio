@@ -61,6 +61,7 @@ import {
 import type { Provider, ProviderTemplate, ProviderModel } from "@/lib/api";
 import { toast } from "sonner";
 import KeyManager, { type KeyConfig } from "@/components/KeyManager";
+import ProviderChannels from "@/components/provider-channels";
 
 type ConfigFieldMap = Record<string, string | KeyConfig[]>;
 
@@ -529,6 +530,7 @@ export default function ProvidersPage() {
                             <Button variant="secondary" size="sm" onClick={() => openModelsDialog(provider.ID)}>
                               模型列表
                             </Button>
+                            <ProviderChannels providerId={provider.ID} providerName={provider.Name} />
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
                                 <Button variant="destructive" size="sm" onClick={() => openDeleteDialog(provider.ID)}>
@@ -581,6 +583,7 @@ export default function ProvidersPage() {
                       <Button variant="secondary" size="sm" className="h-7 px-2 text-xs" onClick={() => openModelsDialog(provider.ID)}>
                         模型
                       </Button>
+                      <ProviderChannels providerId={provider.ID} providerName={provider.Name} />
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
                           <Button variant="destructive" size="sm" className="h-7 px-2 text-xs" onClick={() => openDeleteDialog(provider.ID)}>
