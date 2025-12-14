@@ -26,7 +26,7 @@ func (p *Pool) Pick(ctx context.Context, providerID uint) (key string, keyID uin
 	// 查询启用且未冷却的 Key
 	keys, err = gorm.G[models.ProviderKey](p.db).
 		Where("provider_id = ? AND status = ? AND (cooldown_until IS NULL OR cooldown_until < ?)",
-			providerID, true, now).
+									providerID, true, now).
 		Order("last_used_at IS NOT NULL, last_used_at ASC"). // 优先使用最久未用的
 		Limit(1).
 		Find(ctx)

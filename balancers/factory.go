@@ -10,7 +10,7 @@ type BalancerType string
 
 const (
 	// 现有策略
-	LotteryType           BalancerType = "lottery"
+	LotteryType          BalancerType = "lottery"
 	RotorType            BalancerType = "rotor"
 	SmoothWeightedRRType BalancerType = "smooth_weighted_rr"
 
@@ -71,7 +71,7 @@ func (f *BalancerFactory) GetSupportedTypes() []BalancerType {
 // GetTypeDescription 获取负载均衡器类型描述
 func (f *BalancerFactory) GetTypeDescription(balancerType BalancerType) string {
 	descriptions := map[BalancerType]string{
-		LotteryType:           "按权重概率抽取，类似抽签",
+		LotteryType:          "按权重概率抽取，类似抽签",
 		RotorType:            "按顺序循环轮转，每次降低权重后移到队尾",
 		SmoothWeightedRRType: "平滑加权轮询，避免权重差异过大时的突发流量",
 		ErrorAwareType:       "基于错误率选择，优先选择错误率最低的Provider",

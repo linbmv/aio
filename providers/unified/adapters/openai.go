@@ -12,15 +12,15 @@ type OpenAIAdapter struct{}
 
 // OpenAIRequest OpenAI请求格式
 type OpenAIRequest struct {
-	Model       string                   `json:"model"`
-	Messages    []OpenAIMessage          `json:"messages"`
-	MaxTokens   *int                     `json:"max_tokens,omitempty"`
-	Temperature *float64                 `json:"temperature,omitempty"`
-	TopP        *float64                 `json:"top_p,omitempty"`
-	Stop        interface{}              `json:"stop,omitempty"`
-	Stream      bool                     `json:"stream,omitempty"`
-	Tools       []OpenAITool             `json:"tools,omitempty"`
-	Metadata    map[string]interface{}   `json:"metadata,omitempty"`
+	Model       string                 `json:"model"`
+	Messages    []OpenAIMessage        `json:"messages"`
+	MaxTokens   *int                   `json:"max_tokens,omitempty"`
+	Temperature *float64               `json:"temperature,omitempty"`
+	TopP        *float64               `json:"top_p,omitempty"`
+	Stop        interface{}            `json:"stop,omitempty"`
+	Stream      bool                   `json:"stream,omitempty"`
+	Tools       []OpenAITool           `json:"tools,omitempty"`
+	Metadata    map[string]interface{} `json:"metadata,omitempty"`
 }
 
 type OpenAIMessage struct {
@@ -35,8 +35,8 @@ type OpenAIContent struct {
 }
 
 type OpenAITool struct {
-	Type     string                 `json:"type"`
-	Function OpenAIFunction         `json:"function"`
+	Type     string         `json:"type"`
+	Function OpenAIFunction `json:"function"`
 }
 
 type OpenAIFunction struct {

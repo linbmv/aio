@@ -112,12 +112,12 @@ func (r *TransformerRegistry) DetectOutboundProtocol(providerType string) Outbou
 
 // TransformationContext 转换上下文
 type TransformationContext struct {
-	RequestID     string
-	UserAgent     string
-	ClientIP      string
-	AuthKeyID     uint
-	StartTime     time.Time
-	Metadata      map[string]interface{}
+	RequestID string
+	UserAgent string
+	ClientIP  string
+	AuthKeyID uint
+	StartTime time.Time
+	Metadata  map[string]interface{}
 }
 
 // NewTransformationContext 创建转换上下文

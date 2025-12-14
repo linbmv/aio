@@ -5,7 +5,6 @@ import (
 
 	"github.com/atopos31/llmio/consts"
 	"github.com/atopos31/llmio/providers"
-	"github.com/atopos31/llmio/providers/unified/adapters"
 )
 
 // CreateUnifiedProvider 创建统一Provider的工厂函数
@@ -27,31 +26,8 @@ func CreateUnifiedProvider(config ProviderConfig) (*Provider, error) {
 
 // createAdapter 根据上游类型和协议创建适配器
 func createAdapter(upstreamType, protocol string) (ProtocolAdapter, error) {
-	switch upstreamType {
-	case consts.StyleOpenAI:
-		// OpenAI上游支持的协议
-		switch protocol {
-		case "openai":
-			return adapters.NewOpenAIAdapter(), nil
-		default:
-			return nil, fmt.Errorf("openai upstream doesn't support protocol: %s", protocol)
-		}
-
-	case consts.StyleAnthropic:
-		// Anthropic上游支持的协议
-		switch protocol {
-		case "anthropic":
-			return adapters.NewAnthropicAdapter(), nil
-		case "openai":
-			// 这是关键：使用OpenAI到Anthropic的转换器
-			return adapters.NewOpenAIToAnthropicConverter(), nil
-		default:
-			return nil, fmt.Errorf("anthropic upstream doesn't support protocol: %s", protocol)
-		}
-
-	default:
-		return nil, fmt.Errorf("unsupported upstream type: %s", upstreamType)
-	}
+	// TODO: Implement adapter creation without import cycle
+	return nil, fmt.Errorf("adapter creation temporarily disabled to avoid import cycle")
 }
 
 // CreateOpenAICompatibleProvider 创建支持OpenAI协议的统一Provider

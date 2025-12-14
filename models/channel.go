@@ -9,22 +9,22 @@ import (
 // Channel 渠道表 - AxonHub风格的Channel抽象
 type Channel struct {
 	gorm.Model
-	Name                string                 `json:"name" gorm:"uniqueIndex"`                    // 渠道名称
-	Description         string                 `json:"description"`                                // 渠道描述
-	ProviderID          uint                   `json:"provider_id" gorm:"index"`                   // 关联的Provider ID
-	Provider            Provider               `json:"provider" gorm:"foreignKey:ProviderID"`     // Provider关联
-	SupportedProtocols  []string               `json:"supported_protocols" gorm:"serializer:json"` // 支持的协议列表
+	Name                string                 `json:"name" gorm:"uniqueIndex"`                          // 渠道名称
+	Description         string                 `json:"description"`                                      // 渠道描述
+	ProviderID          uint                   `json:"provider_id" gorm:"index"`                         // 关联的Provider ID
+	Provider            Provider               `json:"provider" gorm:"foreignKey:ProviderID"`            // Provider关联
+	SupportedProtocols  []string               `json:"supported_protocols" gorm:"serializer:json"`       // 支持的协议列表
 	LoadBalanceStrategy string                 `json:"load_balance_strategy" gorm:"default:error_aware"` // 负载均衡策略
-	Weight              int                    `json:"weight" gorm:"default:1"`                    // 权重
-	Status              string                 `json:"status" gorm:"default:active"`               // 状态: active, inactive, cooldown
-	ParameterOverrides  map[string]interface{} `json:"parameter_overrides" gorm:"serializer:json"` // 参数覆盖
+	Weight              int                    `json:"weight" gorm:"default:1"`                          // 权重
+	Status              string                 `json:"status" gorm:"default:active"`                     // 状态: active, inactive, cooldown
+	ParameterOverrides  map[string]interface{} `json:"parameter_overrides" gorm:"serializer:json"`       // 参数覆盖
 
 	// 统计信息
-	TotalRequests   int64     `json:"total_requests" gorm:"default:0"`   // 总请求数
-	SuccessRequests int64     `json:"success_requests" gorm:"default:0"` // 成功请求数
-	ErrorRequests   int64     `json:"error_requests" gorm:"default:0"`   // 错误请求数
-	AvgResponseTime int64     `json:"avg_response_time" gorm:"default:0"` // 平均响应时间(毫秒)
-	LastUsedAt      *time.Time `json:"last_used_at"`                      // 最后使用时间
+	TotalRequests   int64      `json:"total_requests" gorm:"default:0"`    // 总请求数
+	SuccessRequests int64      `json:"success_requests" gorm:"default:0"`  // 成功请求数
+	ErrorRequests   int64      `json:"error_requests" gorm:"default:0"`    // 错误请求数
+	AvgResponseTime int64      `json:"avg_response_time" gorm:"default:0"` // 平均响应时间(毫秒)
+	LastUsedAt      *time.Time `json:"last_used_at"`                       // 最后使用时间
 
 	// 冷却相关
 	CooldownUntil *time.Time `json:"cooldown_until"` // 冷却截止时间
@@ -37,33 +37,33 @@ type Channel struct {
 // ModelMapping 模型映射表 - 虚拟模型到实际模型的映射
 type ModelMapping struct {
 	gorm.Model
-	ChannelID           uint                   `json:"channel_id" gorm:"index"`                    // 所属Channel
-	Channel             Channel                `json:"channel" gorm:"foreignKey:ChannelID"`       // Channel关联
-	VirtualModel        string                 `json:"virtual_model" gorm:"index"`                 // 虚拟模型名称
-	ActualModel         string                 `json:"actual_model"`                               // 实际模型名称
-	Protocol            string                 `json:"protocol"`                                   // 使用的协议
-	ParameterOverrides  map[string]interface{} `json:"parameter_overrides" gorm:"serializer:json"` // 参数覆盖
-	Weight              int                    `json:"weight" gorm:"default:1"`                    // 权重
-	Status              string                 `json:"status" gorm:"default:active"`               // 状态
+	ChannelID          uint                   `json:"channel_id" gorm:"index"`                    // 所属Channel
+	Channel            Channel                `json:"channel" gorm:"foreignKey:ChannelID"`        // Channel关联
+	VirtualModel       string                 `json:"virtual_model" gorm:"index"`                 // 虚拟模型名称
+	ActualModel        string                 `json:"actual_model"`                               // 实际模型名称
+	Protocol           string                 `json:"protocol"`                                   // 使用的协议
+	ParameterOverrides map[string]interface{} `json:"parameter_overrides" gorm:"serializer:json"` // 参数覆盖
+	Weight             int                    `json:"weight" gorm:"default:1"`                    // 权重
+	Status             string                 `json:"status" gorm:"default:active"`               // 状态
 
 	// 统计信息
-	RequestCount    int64     `json:"request_count" gorm:"default:0"`    // 请求次数
-	SuccessCount    int64     `json:"success_count" gorm:"default:0"`    // 成功次数
-	ErrorCount      int64     `json:"error_count" gorm:"default:0"`      // 错误次数
-	LastUsedAt      *time.Time `json:"last_used_at"`                      // 最后使用时间
-	AvgResponseTime int64     `json:"avg_response_time" gorm:"default:0"` // 平均响应时间
+	RequestCount    int64      `json:"request_count" gorm:"default:0"`     // 请求次数
+	SuccessCount    int64      `json:"success_count" gorm:"default:0"`     // 成功次数
+	ErrorCount      int64      `json:"error_count" gorm:"default:0"`       // 错误次数
+	LastUsedAt      *time.Time `json:"last_used_at"`                       // 最后使用时间
+	AvgResponseTime int64      `json:"avg_response_time" gorm:"default:0"` // 平均响应时间
 }
 
 // ChannelStats Channel统计信息
 type ChannelStats struct {
-	ChannelID       uint    `json:"channel_id"`
-	ChannelName     string  `json:"channel_name"`
-	TotalRequests   int64   `json:"total_requests"`
-	SuccessRequests int64   `json:"success_requests"`
-	ErrorRequests   int64   `json:"error_requests"`
-	ErrorRate       float64 `json:"error_rate"`
-	AvgResponseTime int64   `json:"avg_response_time"`
-	Status          string  `json:"status"`
+	ChannelID       uint       `json:"channel_id"`
+	ChannelName     string     `json:"channel_name"`
+	TotalRequests   int64      `json:"total_requests"`
+	SuccessRequests int64      `json:"success_requests"`
+	ErrorRequests   int64      `json:"error_requests"`
+	ErrorRate       float64    `json:"error_rate"`
+	AvgResponseTime int64      `json:"avg_response_time"`
+	Status          string     `json:"status"`
 	LastUsedAt      *time.Time `json:"last_used_at"`
 }
 

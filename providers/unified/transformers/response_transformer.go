@@ -196,9 +196,9 @@ type OpenAIClientResponse struct {
 }
 
 type OpenAIClientChoice struct {
-	Index        int                `json:"index"`
+	Index        int                 `json:"index"`
 	Message      OpenAIClientMessage `json:"message"`
-	FinishReason string             `json:"finish_reason"`
+	FinishReason string              `json:"finish_reason"`
 }
 
 type OpenAIClientMessage struct {

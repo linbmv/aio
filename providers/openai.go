@@ -58,6 +58,7 @@ func (o *OpenAI) BuildReqWithKey(ctx context.Context, header http.Header, model 
 		req.Header = header
 	}
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "LLMIO-Gateway/1.0")
 	apiKey := key
 	usedKeyID := keyID
 	if apiKey == "" {

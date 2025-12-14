@@ -69,8 +69,8 @@ func (t *OpenAIInboundTransformer) Transform(ctx context.Context, request *http.
 	canonical.Messages = make([]unified.CanonicalMessage, len(openaiReq.Messages))
 	for i, msg := range openaiReq.Messages {
 		canonical.Messages[i] = unified.CanonicalMessage{
-			Role: msg.Role,
-			Name: msg.Name,
+			Role:     msg.Role,
+			Name:     msg.Name,
 			Metadata: make(map[string]interface{}),
 		}
 
@@ -140,14 +140,14 @@ func (t *OpenAIInboundTransformer) Transform(ctx context.Context, request *http.
 
 // OpenAI请求结构体
 type OpenAIRequest struct {
-	Model       string      `json:"model"`
+	Model       string          `json:"model"`
 	Messages    []OpenAIMessage `json:"messages"`
-	MaxTokens   *int        `json:"max_tokens,omitempty"`
-	Temperature *float64    `json:"temperature,omitempty"`
-	TopP        *float64    `json:"top_p,omitempty"`
-	Stop        []string    `json:"stop,omitempty"`
-	Stream      bool        `json:"stream,omitempty"`
-	Tools       []OpenAITool `json:"tools,omitempty"`
+	MaxTokens   *int            `json:"max_tokens,omitempty"`
+	Temperature *float64        `json:"temperature,omitempty"`
+	TopP        *float64        `json:"top_p,omitempty"`
+	Stop        []string        `json:"stop,omitempty"`
+	Stream      bool            `json:"stream,omitempty"`
+	Tools       []OpenAITool    `json:"tools,omitempty"`
 }
 
 type OpenAIMessage struct {
@@ -157,8 +157,8 @@ type OpenAIMessage struct {
 }
 
 type OpenAITool struct {
-	Type     string            `json:"type"`
-	Function *OpenAIFunction   `json:"function,omitempty"`
+	Type     string          `json:"type"`
+	Function *OpenAIFunction `json:"function,omitempty"`
 }
 
 type OpenAIFunction struct {

@@ -11,7 +11,7 @@ import (
 // Scope 定义缓存作用域，确保多租户隔离
 type Scope struct {
 	AuthKeyID uint   `json:"auth_key_id"`
-	Style     string `json:"style"`     // API风格：OpenAI/Anthropic/OpenAIRes
+	Style     string `json:"style"` // API风格：OpenAI/Anthropic/OpenAIRes
 	Model     string `json:"model"`
 	Mode      string `json:"mode"`
 	Stream    bool   `json:"stream"`
@@ -40,17 +40,17 @@ type Options struct {
 
 // Value 表示缓存的响应数据
 type Value struct {
-	StatusCode    int         `json:"status_code"`
-	Header        http.Header `json:"header"`
-	Body          []byte      `json:"body"`
-	CreatedAt     time.Time   `json:"created_at"`
-	ExpiresAt     time.Time   `json:"expires_at"`
+	StatusCode int         `json:"status_code"`
+	Header     http.Header `json:"header"`
+	Body       []byte      `json:"body"`
+	CreatedAt  time.Time   `json:"created_at"`
+	ExpiresAt  time.Time   `json:"expires_at"`
 
 	// 审计相关字段
-	SourceLogID   uint        `json:"source_log_id"`   // 最初生成缓存的日志ID
-	Usage         interface{} `json:"usage"`           // 原始Usage信息
-	ProviderName  string      `json:"provider_name"`   // Provider名称
-	ProviderModel string      `json:"provider_model"`  // Provider模型
+	SourceLogID   uint        `json:"source_log_id"`  // 最初生成缓存的日志ID
+	Usage         interface{} `json:"usage"`          // 原始Usage信息
+	ProviderName  string      `json:"provider_name"`  // Provider名称
+	ProviderModel string      `json:"provider_model"` // Provider模型
 
 	// 性能优化字段
 	Shared bool `json:"shared"` // 标记是否为共享引用（只读）

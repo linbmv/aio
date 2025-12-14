@@ -64,15 +64,15 @@ func normalizeAndHashRequestBody(rawBody []byte) (string, error) {
 	semanticFields := []string{
 		// 基本字段
 		"model",
-		"messages",            // chat/messages 风格
-		"input",               // responses API / vision 输入
+		"messages", // chat/messages 风格
+		"input",    // responses API / vision 输入
 		"stream",
 
 		// 输出数量/长度控制
 		"max_tokens",
-		"max_tokens_to_sample",     // Anthropic
-		"max_completion_tokens",    // OpenAI responses
-		"n",                        // 返回多少条 completion
+		"max_tokens_to_sample",  // Anthropic
+		"max_completion_tokens", // OpenAI responses
+		"n",                     // 返回多少条 completion
 		"stop",
 		"stop_sequences",
 
@@ -85,12 +85,12 @@ func normalizeAndHashRequestBody(rawBody []byte) (string, error) {
 		"frequency_penalty",
 
 		// 结果形式/结构
-		"response_format",          // 包含其中的 format/json_schema 等
+		"response_format", // 包含其中的 format/json_schema 等
 		"tool_choice",
-		"tool_choice_type",         // 若序列化时拆成 type
+		"tool_choice_type", // 若序列化时拆成 type
 		"tools",
-		"function_call",            // 旧版 openai
-		"functions",                // 旧版 openai
+		"function_call", // 旧版 openai
+		"functions",     // 旧版 openai
 
 		// logprob/置信度相关
 		"logprobs",
@@ -99,13 +99,13 @@ func normalizeAndHashRequestBody(rawBody []byte) (string, error) {
 
 		// 角色/指令补充
 		"system",
-		"user",                     // responses API 里可能单独存在
-		"metadata",                 // Anthropic/Responses 都允许附带
-		"parallel_tool_calls",      // OpenAI responses 支持并行工具调用开关
-		"reasoning_effort",         // OpenAI responses，影响深度/成本
-		"modalities",               // OpenAI responses，控制输出模态
-		"audio",                    // responses 模式下的音频配置
-		"vision",                   // vision 相关配置字段
+		"user",                // responses API 里可能单独存在
+		"metadata",            // Anthropic/Responses 都允许附带
+		"parallel_tool_calls", // OpenAI responses 支持并行工具调用开关
+		"reasoning_effort",    // OpenAI responses，影响深度/成本
+		"modalities",          // OpenAI responses，控制输出模态
+		"audio",               // responses 模式下的音频配置
+		"vision",              // vision 相关配置字段
 	}
 
 	// 提取语义相关字段

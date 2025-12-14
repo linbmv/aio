@@ -21,9 +21,9 @@ type CanonicalRequest struct {
 
 // CanonicalMessage 统一的消息格式
 type CanonicalMessage struct {
-	Role    string                 `json:"role"`
-	Content []CanonicalContent     `json:"content"`
-	Name    string                 `json:"name,omitempty"`
+	Role     string                 `json:"role"`
+	Content  []CanonicalContent     `json:"content"`
+	Name     string                 `json:"name,omitempty"`
 	Metadata map[string]interface{} `json:"metadata,omitempty"`
 }
 
@@ -43,11 +43,11 @@ type CanonicalTool struct {
 
 // CanonicalResponse 统一的响应格式
 type CanonicalResponse struct {
-	ID      string                 `json:"id"`
-	Model   string                 `json:"model"`
-	Choices []CanonicalChoice      `json:"choices"`
-	Usage   CanonicalUsage         `json:"usage"`
-	Created time.Time              `json:"created"`
+	ID       string                 `json:"id"`
+	Model    string                 `json:"model"`
+	Choices  []CanonicalChoice      `json:"choices"`
+	Usage    CanonicalUsage         `json:"usage"`
+	Created  time.Time              `json:"created"`
 	Metadata map[string]interface{} `json:"metadata,omitempty"`
 }
 

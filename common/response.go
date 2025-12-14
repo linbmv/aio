@@ -93,3 +93,17 @@ func Forbidden(c *gin.Context, message string) {
 		Message: message,
 	})
 }
+
+// SuccessResponse 成功响应 (别名)
+func SuccessResponse(c *gin.Context, data any) {
+	Success(c, data)
+}
+
+// ErrorResponse 错误响应 (别名)
+func ErrorResponse(c *gin.Context, httpStatus int, message string, error string) {
+	c.JSON(httpStatus, Response{
+		Code:    httpStatus,
+		Message: message,
+		Error:   error,
+	})
+}

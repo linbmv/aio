@@ -24,17 +24,17 @@ func RecordCacheHit(ctx context.Context, cacheKey cache.Key, cached *cache.Value
 
 		// 构建缓存命中日志
 		log := models.ChatLog{
-			Name:          cacheKey.Scope.Model,
-			ProviderModel: cached.ProviderModel,
-			ProviderName:  cached.ProviderName,
-			Status:        "success",
-			Style:         cacheKey.Scope.Style,
-			UserAgent:     reqMeta.UserAgent,
-			RemoteIP:      reqMeta.RemoteIP,
-			AuthKeyID:     authKeyID,
-			ChatIO:        false, // 缓存命中不记录IO
-			Size:          len(cached.Body),
-			Cached:        true,
+			Name:            cacheKey.Scope.Model,
+			ProviderModel:   cached.ProviderModel,
+			ProviderName:    cached.ProviderName,
+			Status:          "success",
+			Style:           cacheKey.Scope.Style,
+			UserAgent:       reqMeta.UserAgent,
+			RemoteIP:        reqMeta.RemoteIP,
+			AuthKeyID:       authKeyID,
+			ChatIO:          false, // 缓存命中不记录IO
+			Size:            len(cached.Body),
+			Cached:          true,
 			CachedFromLogID: &cached.SourceLogID,
 		}
 

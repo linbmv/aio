@@ -3,7 +3,6 @@ package handler
 import (
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/atopos31/llmio/common"
 	"github.com/atopos31/llmio/models"
@@ -37,7 +36,7 @@ type ModelMappingRequest struct {
 // ChannelResponse Channel响应
 type ChannelResponse struct {
 	models.Channel
-	ProviderName string `json:"provider_name"`
+	ProviderName string  `json:"provider_name"`
 	ErrorRate    float64 `json:"error_rate"`
 	SuccessRate  float64 `json:"success_rate"`
 }
@@ -68,10 +67,10 @@ func GetChannels(c *gin.Context) {
 	var responses []ChannelResponse
 	for _, channel := range channels {
 		response := ChannelResponse{
-			Channel:     channel,
+			Channel:      channel,
 			ProviderName: channel.Provider.Name,
-			ErrorRate:   channel.GetErrorRate(),
-			SuccessRate: channel.GetSuccessRate(),
+			ErrorRate:    channel.GetErrorRate(),
+			SuccessRate:  channel.GetSuccessRate(),
 		}
 		responses = append(responses, response)
 	}
@@ -98,10 +97,10 @@ func GetChannel(c *gin.Context) {
 	}
 
 	response := ChannelResponse{
-		Channel:     channel,
+		Channel:      channel,
 		ProviderName: channel.Provider.Name,
-		ErrorRate:   channel.GetErrorRate(),
-		SuccessRate: channel.GetSuccessRate(),
+		ErrorRate:    channel.GetErrorRate(),
+		SuccessRate:  channel.GetSuccessRate(),
 	}
 
 	common.SuccessResponse(c, response)
@@ -170,10 +169,10 @@ func CreateChannel(c *gin.Context) {
 	models.DB.Preload("Provider").First(&channel, channel.ID)
 
 	response := ChannelResponse{
-		Channel:     channel,
+		Channel:      channel,
 		ProviderName: channel.Provider.Name,
-		ErrorRate:   0,
-		SuccessRate: 0,
+		ErrorRate:    0,
+		SuccessRate:  0,
 	}
 
 	common.SuccessResponse(c, response)
@@ -242,10 +241,10 @@ func UpdateChannel(c *gin.Context) {
 	models.DB.Preload("Provider").First(&channel, channel.ID)
 
 	response := ChannelResponse{
-		Channel:     channel,
+		Channel:      channel,
 		ProviderName: channel.Provider.Name,
-		ErrorRate:   channel.GetErrorRate(),
-		SuccessRate: channel.GetSuccessRate(),
+		ErrorRate:    channel.GetErrorRate(),
+		SuccessRate:  channel.GetSuccessRate(),
 	}
 
 	common.SuccessResponse(c, response)

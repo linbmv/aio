@@ -6,6 +6,7 @@ import (
 	"math"
 	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/atopos31/llmio/common"
 	"github.com/atopos31/llmio/consts"
@@ -19,10 +20,10 @@ import (
 
 // ProviderRequest represents the request body for creating/updating a provider
 type ProviderRequest struct {
-	Name               string                 `json:"name"`
-	Type               string                 `json:"type"`
-	Config             string                 `json:"config"`
-	Console            string                 `json:"console"`
+	Name    string `json:"name"`
+	Type    string `json:"type"`
+	Config  string `json:"config"`
+	Console string `json:"console"`
 
 	// 新增统一Provider系统字段
 	SupportedProtocols []string               `json:"supported_protocols"`

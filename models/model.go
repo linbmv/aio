@@ -9,10 +9,10 @@ import (
 
 type Provider struct {
 	gorm.Model
-	Name               string                 `json:"name"`
-	Type               string                 `json:"type"`
-	Config             string                 `json:"config"`
-	Console            string                 `json:"console"` // 控制台地址
+	Name    string `json:"name"`
+	Type    string `json:"type"`
+	Config  string `json:"config"`
+	Console string `json:"console"` // 控制台地址
 
 	// 新增字段支持统一Provider系统
 	SupportedProtocols []string               `json:"supported_protocols" gorm:"serializer:json"` // 支持的协议列表
@@ -76,8 +76,8 @@ type ChatLog struct {
 	Size           int // 响应大小 字节
 
 	// 缓存相关字段
-	Cached         bool  `gorm:"index;default:false"` // 是否来源于缓存命中
-	CachedFromLogID *uint `gorm:"index"`              // 指向最初生成缓存的日志ID
+	Cached          bool  `gorm:"index;default:false"` // 是否来源于缓存命中
+	CachedFromLogID *uint `gorm:"index"`               // 指向最初生成缓存的日志ID
 
 	Usage
 }

@@ -172,18 +172,18 @@ func (c *OpenAIToAnthropicConverter) BuildResponse(canonical *unified.CanonicalR
 
 // OpenAI响应格式定义
 type OpenAIResponse struct {
-	ID      string          `json:"id"`
-	Object  string          `json:"object"`
-	Created int64           `json:"created"`
-	Model   string          `json:"model"`
-	Choices []OpenAIChoice  `json:"choices"`
-	Usage   OpenAIUsage     `json:"usage"`
+	ID      string         `json:"id"`
+	Object  string         `json:"object"`
+	Created int64          `json:"created"`
+	Model   string         `json:"model"`
+	Choices []OpenAIChoice `json:"choices"`
+	Usage   OpenAIUsage    `json:"usage"`
 }
 
 type OpenAIChoice struct {
-	Index        int         `json:"index"`
+	Index        int           `json:"index"`
 	Message      OpenAIMessage `json:"message"`
-	FinishReason string      `json:"finish_reason"`
+	FinishReason string        `json:"finish_reason"`
 }
 
 type OpenAIUsage struct {

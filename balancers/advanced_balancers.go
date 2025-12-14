@@ -202,7 +202,7 @@ func (b *TraceAwareBalancer) Pop() (uint, error) {
 
 		// 比较响应时间，选择最快的
 		if stats.AvgResponseTime == 0 ||
-		   (bestProvider.AvgResponseTime > 0 && stats.AvgResponseTime < bestProvider.AvgResponseTime) {
+			(bestProvider.AvgResponseTime > 0 && stats.AvgResponseTime < bestProvider.AvgResponseTime) {
 			bestProvider = stats
 			bestID = id
 		}
@@ -247,9 +247,9 @@ type WeightRoundRobinBalancer struct {
 }
 
 type weightedItem struct {
-	id            uint
-	weight        int
-	currentWeight int
+	id              uint
+	weight          int
+	currentWeight   int
 	effectiveWeight int
 }
 

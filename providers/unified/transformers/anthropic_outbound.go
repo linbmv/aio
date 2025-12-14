@@ -28,8 +28,8 @@ func (t *AnthropicOutboundTransformer) Protocol() string {
 // CanHandle 检测是否支持该Provider
 func (t *AnthropicOutboundTransformer) CanHandle(providerType string) bool {
 	return strings.ToLower(providerType) == "anthropic" ||
-		   strings.Contains(strings.ToLower(providerType), "anthropic") ||
-		   strings.Contains(strings.ToLower(providerType), "claude")
+		strings.Contains(strings.ToLower(providerType), "anthropic") ||
+		strings.Contains(strings.ToLower(providerType), "claude")
 }
 
 // Transform 将内部统一格式转换为Anthropic Provider请求
@@ -217,21 +217,21 @@ func (t *AnthropicOutboundTransformer) ParseResponse(ctx context.Context, resp *
 
 // Anthropic上游请求结构体
 type AnthropicUpstreamRequest struct {
-	Model         string                      `json:"model"`
-	MaxTokens     int                         `json:"max_tokens"`
-	Messages      []AnthropicUpstreamMessage  `json:"messages"`
-	System        string                      `json:"system,omitempty"`
-	Temperature   *float64                    `json:"temperature,omitempty"`
-	TopP          *float64                    `json:"top_p,omitempty"`
-	TopK          *int                        `json:"top_k,omitempty"`
-	StopSequences []string                    `json:"stop_sequences,omitempty"`
-	Stream        bool                        `json:"stream,omitempty"`
-	Tools         []AnthropicUpstreamTool     `json:"tools,omitempty"`
+	Model         string                     `json:"model"`
+	MaxTokens     int                        `json:"max_tokens"`
+	Messages      []AnthropicUpstreamMessage `json:"messages"`
+	System        string                     `json:"system,omitempty"`
+	Temperature   *float64                   `json:"temperature,omitempty"`
+	TopP          *float64                   `json:"top_p,omitempty"`
+	TopK          *int                       `json:"top_k,omitempty"`
+	StopSequences []string                   `json:"stop_sequences,omitempty"`
+	Stream        bool                       `json:"stream,omitempty"`
+	Tools         []AnthropicUpstreamTool    `json:"tools,omitempty"`
 }
 
 type AnthropicUpstreamMessage struct {
-	Role    string                      `json:"role"`
-	Content []AnthropicUpstreamContent  `json:"content"`
+	Role    string                     `json:"role"`
+	Content []AnthropicUpstreamContent `json:"content"`
 }
 
 type AnthropicUpstreamContent struct {
@@ -253,14 +253,14 @@ type AnthropicUpstreamTool struct {
 
 // Anthropic上游响应结构体
 type AnthropicUpstreamResponse struct {
-	ID           string                      `json:"id"`
-	Type         string                      `json:"type"`
-	Role         string                      `json:"role"`
-	Model        string                      `json:"model"`
-	Content      []AnthropicUpstreamContent  `json:"content"`
-	StopReason   string                      `json:"stop_reason"`
-	StopSequence string                      `json:"stop_sequence,omitempty"`
-	Usage        AnthropicUpstreamUsage      `json:"usage"`
+	ID           string                     `json:"id"`
+	Type         string                     `json:"type"`
+	Role         string                     `json:"role"`
+	Model        string                     `json:"model"`
+	Content      []AnthropicUpstreamContent `json:"content"`
+	StopReason   string                     `json:"stop_reason"`
+	StopSequence string                     `json:"stop_sequence,omitempty"`
+	Usage        AnthropicUpstreamUsage     `json:"usage"`
 }
 
 type AnthropicUpstreamUsage struct {

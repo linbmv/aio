@@ -1,8 +1,6 @@
 package handler
 
 import (
-	"net/http"
-
 	"github.com/atopos31/llmio/balancers"
 	"github.com/atopos31/llmio/common"
 	"github.com/gin-gonic/gin"
@@ -38,7 +36,7 @@ func GetBalancerTypes(c *gin.Context) {
 // getBalancerTypeName 获取负载均衡器类型的中文名称
 func getBalancerTypeName(balancerType balancers.BalancerType) string {
 	names := map[balancers.BalancerType]string{
-		balancers.LotteryType:           "权重抽签",
+		balancers.LotteryType:          "权重抽签",
 		balancers.RotorType:            "循环轮转",
 		balancers.SmoothWeightedRRType: "平滑加权轮询",
 		balancers.ErrorAwareType:       "错误感知",
