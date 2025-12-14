@@ -50,8 +50,8 @@ const modelMappingSchema = z.object({
   virtual_model: z.string().min(1, "虚拟模型名称不能为空"),
   actual_model: z.string().min(1, "实际模型名称不能为空"),
   protocol: z.string().min(1, "请选择协议"),
-  weight: z.number().min(1, "权重必须大于0").default(1),
-  status: z.string().default("active"),
+  weight: z.number().min(1, "权重必须大于0"),
+  status: z.string(),
 });
 
 type ModelMappingFormData = z.infer<typeof modelMappingSchema>;

@@ -17,8 +17,8 @@ import {
   TableHeader,
   TableRow
 } from "@/components/ui/table";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { FaNetworkWired, FaEye } from "react-icons/fa";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { FaNetworkWired } from "react-icons/fa";
 import { toast } from "sonner";
 
 interface Channel {

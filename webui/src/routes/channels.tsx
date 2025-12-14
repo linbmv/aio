@@ -52,8 +52,8 @@ const channelSchema = z.object({
   provider_id: z.number().min(1, "请选择Provider"),
   supported_protocols: z.array(z.string()).min(1, "至少选择一个协议"),
   load_balance_strategy: z.string().min(1, "请选择负载均衡策略"),
-  weight: z.number().min(1, "权重必须大于0").default(1),
-  status: z.string().default("active"),
+  weight: z.number().min(1, "权重必须大于0"),
+  status: z.string(),
 });
 
 type ChannelFormData = z.infer<typeof channelSchema>;
@@ -101,7 +101,7 @@ export default function Channels() {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [providers, setProviders] = useState<Provider[]>([]);
   const [balancerTypes, setBalancerTypes] = useState<BalancerType[]>([]);
-  const [protocols, setProtocols] = useState<Protocol[]>([]);
+  const [, setProtocols] = useState<Protocol[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingChannel, setEditingChannel] = useState<Channel | null>(null);
   const [loading, setLoading] = useState(true);
