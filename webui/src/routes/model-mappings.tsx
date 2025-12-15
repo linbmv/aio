@@ -79,7 +79,7 @@ interface ModelMapping {
 }
 
 interface Channel {
-  id: number;
+  ID: number;
   name: string;
   provider_name: string;
   supported_protocols: string[];
@@ -314,7 +314,7 @@ export default function ModelMappings() {
                 <SelectContent>
                   <SelectItem value="all">所有Channel</SelectItem>
                   {channels.map((channel) => (
-                    <SelectItem key={channel.id} value={channel.id.toString()}>
+                    <SelectItem key={channel.ID} value={channel.ID.toString()}>
                       {channel.name}
                     </SelectItem>
                   ))}
@@ -419,7 +419,7 @@ export default function ModelMappings() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Channel</FormLabel>
-                    <Select onValueChange={(value) => field.onChange(parseInt(value))} value={field.value?.toString()}>
+                    <Select onValueChange={(value) => field.onChange(parseInt(value))} value={field.value?.toString() || ""}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="选择Channel" />
@@ -427,7 +427,7 @@ export default function ModelMappings() {
                       </FormControl>
                       <SelectContent>
                         {channels.map((channel) => (
-                          <SelectItem key={channel.id} value={channel.id.toString()}>
+                          <SelectItem key={channel.ID} value={channel.ID.toString()}>
                             {channel.name} ({channel.provider_name})
                           </SelectItem>
                         ))}

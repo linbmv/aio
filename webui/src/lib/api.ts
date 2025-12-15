@@ -4,10 +4,10 @@ const API_BASE = '/api';
 
 export interface Provider {
   ID: number;
-  Name: string;
-  Type: string;
-  Config: string;
-  Console: string;
+  name: string;
+  type: string;
+  config: string;
+  console: string;
 }
 
 export interface Model {

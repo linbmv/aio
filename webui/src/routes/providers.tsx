@@ -222,8 +222,8 @@ export default function ProvidersPage() {
 
     let nextFields = configCacheRef.current[selectedProviderType];
 
-    if (!nextFields && editingProvider && editingProvider.Type === selectedProviderType) {
-      const editingConfig = parseConfigJson(editingProvider.Config);
+    if (!nextFields && editingProvider && editingProvider.type === selectedProviderType) {
+      const editingConfig = parseConfigJson(editingProvider.config);
       if (editingConfig) {
         const migratedConfig = migrateApiKeyToKeys(editingConfig);
         nextFields = mergeTemplateWithConfig(templateFields, migratedConfig, true);
@@ -376,7 +376,7 @@ export default function ProvidersPage() {
       await deleteProvider(deleteId);
       setDeleteId(null);
       fetchProviders();
-      toast.success(`提供商 ${targetProvider?.Name ?? deleteId} 删除成功`);
+      toast.success(`提供商 ${targetProvider?.name ?? deleteId} 删除成功`);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       toast.error(`删除提供商失败: ${message}`);
@@ -388,10 +388,10 @@ export default function ProvidersPage() {
     configCacheRef.current = {};
     setEditingProvider(provider);
     form.reset({
-      name: provider.Name,
-      type: provider.Type,
-      config: provider.Config,
-      console: provider.Console || "",
+      name: provider.name,
+      type: provider.type,
+      config: provider.config,
+      console: provider.console || "",
     });
     setOpen(true);
   };
@@ -503,18 +503,18 @@ export default function ProvidersPage() {
                     {providers.map((provider) => (
                       <TableRow key={provider.ID}>
                         <TableCell className="font-mono text-xs text-muted-foreground">{provider.ID}</TableCell>
-                        <TableCell className="font-medium">{provider.Name}</TableCell>
-                        <TableCell className="text-sm">{provider.Type}</TableCell>
+                        <TableCell className="font-medium">{provider.name}</TableCell>
+                        <TableCell className="text-sm">{provider.type}</TableCell>
                         <TableCell className="text-xs text-muted-foreground font-mono">
-                          {getConfigBaseUrl(provider.Config)}
+                          {getConfigBaseUrl(provider.config)}
                         </TableCell>
                         <TableCell>
-                          {provider.Console ? (
+                          {provider.console ? (
                             <Button
-                              title={provider.Console}
+                              title={provider.console}
                               variant="outline"
                               size="sm"
-                              onClick={() => window.open(provider.Console, '_blank')}
+                              onClick={() => window.open(provider.console, '_blank')}
                             >
                               前往
                             </Button>
@@ -530,7 +530,7 @@ export default function ProvidersPage() {
                             <Button variant="secondary" size="sm" onClick={() => openModelsDialog(provider.ID)}>
                               模型列表
                             </Button>
-                            <ProviderChannels providerId={provider.ID} providerName={provider.Name} />
+                            <ProviderChannels providerId={provider.ID} providerName={provider.name} />
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
                                 <Button variant="destructive" size="sm" onClick={() => openDeleteDialog(provider.ID)}>
@@ -563,14 +563,14 @@ export default function ProvidersPage() {
                 <div key={provider.ID} className="py-3 space-y-3">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
-                      <h3 className="font-semibold text-sm truncate">{provider.Name}</h3>
+                      <h3 className="font-semibold text-sm truncate">{provider.name}</h3>
                       <p className="text-[11px] text-muted-foreground">ID: {provider.ID}</p>
-                      <p className="text-[11px] text-muted-foreground">类型: {provider.Type || "未知"}</p>
-                      {provider.Console && (
+                      <p className="text-[11px] text-muted-foreground">类型: {provider.type || "未知"}</p>
+                      {provider.console && (
                         <Button
                           variant="link"
                           className="px-0 h-auto text-[11px]"
-                          onClick={() => window.open(provider.Console, '_blank')}
+                          onClick={() => window.open(provider.console, '_blank')}
                         >
                           控制台
                         </Button>
@@ -583,7 +583,7 @@ export default function ProvidersPage() {
                       <Button variant="secondary" size="sm" className="h-7 px-2 text-xs" onClick={() => openModelsDialog(provider.ID)}>
                         模型
                       </Button>
-                      <ProviderChannels providerId={provider.ID} providerName={provider.Name} />
+                      <ProviderChannels providerId={provider.ID} providerName={provider.name} />
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
                           <Button variant="destructive" size="sm" className="h-7 px-2 text-xs" onClick={() => openDeleteDialog(provider.ID)}>
@@ -816,7 +816,7 @@ export default function ProvidersPage() {
       <Dialog open={modelsOpen} onOpenChange={setModelsOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>{providers.find(v => v.ID === modelsOpenId)?.Name}模型列表</DialogTitle>
+            <DialogTitle>{providers.find(v => v.ID === modelsOpenId)?.name}模型列表</DialogTitle>
             <DialogDescription>
               当前提供商的所有可用模型
             </DialogDescription>

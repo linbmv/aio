@@ -79,7 +79,7 @@ interface Channel {
 }
 
 interface Provider {
-  id: number;
+  ID: number;
   name: string;
   type: string;
 }
@@ -472,7 +472,7 @@ export default function Channels() {
                       </FormControl>
                       <SelectContent>
                         {providers.map((provider) => (
-                          <SelectItem key={provider.id} value={provider.id.toString()}>
+                          <SelectItem key={provider.ID} value={provider.ID.toString()}>
                             {provider.name} ({provider.type})
                           </SelectItem>
                         ))}

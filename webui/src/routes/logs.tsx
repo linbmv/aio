@@ -224,7 +224,7 @@ export default function LogsPage() {
               <SelectContent>
                 <SelectItem value="all">全部</SelectItem>
                 {providers.map((p) => (
-                  <SelectItem key={p.ID} value={p.Name}>{p.Name}</SelectItem>
+                  <SelectItem key={p.ID} value={p.name}>{p.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

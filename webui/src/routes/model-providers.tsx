@@ -324,7 +324,7 @@ export default function ModelProvidersPage() {
       const data = await getProviderModels(providerId);
       setProviderModelsMap(prev => ({ ...prev, [providerId]: data }));
     } catch (err) {
-      toast.warning(`获取提供商: ${providers.find(e => e.ID === providerId)?.Name} 模型列表失败, 请手动填写提供商模型\n${err}`);
+      toast.warning(`获取提供商: ${providers.find(e => e.ID === providerId)?.name} 模型列表失败, 请手动填写提供商模型\n${err}`);
       setProviderModelsMap(prev => ({ ...prev, [providerId]: [] }));
     } finally {
       setProviderModelsLoading(prev => {
@@ -628,13 +628,13 @@ export default function ModelProvidersPage() {
   };
 
   // 获取唯一的提供商类型列表
-  const providerTypes = Array.from(new Set(providers.map(p => p.Type).filter(Boolean)));
+  const providerTypes = Array.from(new Set(providers.map(p => p.type).filter(Boolean)));
 
   // 根据选择的提供商类型过滤模型提供商关联，并按权重排序
   const filteredModelProviders = selectedProviderType && selectedProviderType !== "all"
     ? modelProviders.filter(association => {
       const provider = providers.find(p => p.ID === association.ProviderID);
-      return provider?.Type === selectedProviderType;
+      return provider?.type === selectedProviderType;
     })
     : modelProviders;
 
@@ -779,8 +779,8 @@ export default function ModelProvidersPage() {
                           <TableCell className="max-w-[200px] truncate" title={association.ProviderModel}>
                             {association.ProviderModel}
                           </TableCell>
-                          <TableCell>{provider?.Type ?? '未知'}</TableCell>
-                          <TableCell>{provider?.Name ?? '未知'}</TableCell>
+                          <TableCell>{provider?.type ?? '未知'}</TableCell>
+                          <TableCell>{provider?.name ?? '未知'}</TableCell>
                           <TableCell>
                             <span className={association.ToolCall ? "text-green-600" : "text-red-600"}>
                               {association.ToolCall ? '✓' : '✗'}
@@ -881,7 +881,7 @@ export default function ModelProvidersPage() {
                   <div key={association.ID} className="py-3 space-y-3">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
-                        <h3 className="font-semibold text-sm truncate">{provider?.Name ?? '未知提供商'}</h3>
+                        <h3 className="font-semibold text-sm truncate">{provider?.name ?? '未知提供商'}</h3>
                         <p className="text-[11px] text-muted-foreground">提供商模型: {association.ProviderModel}</p>
                       </div>
                       <span
@@ -891,7 +891,7 @@ export default function ModelProvidersPage() {
                       </span>
                     </div>
                     <div className="grid grid-cols-2 gap-3 text-xs">
-                      <MobileInfoItem label="提供商类型" value={provider?.Type ?? '未知'} />
+                      <MobileInfoItem label="提供商类型" value={provider?.type ?? '未知'} />
                       <MobileInfoItem label="提供商 ID" value={<span className="font-mono text-xs">{provider?.ID ?? '-'}</span>} />
                       <MobileInfoItem label="权重" value={association.Weight} />
                       <MobileInfoItem
@@ -1061,7 +1061,7 @@ export default function ModelProvidersPage() {
                         <SelectContent>
                           {providers.map((provider) => (
                             <SelectItem key={provider.ID} value={provider.ID.toString()}>
-                              {provider.Name}
+                              {provider.name}
                             </SelectItem>
                           ))}
                         </SelectContent>
